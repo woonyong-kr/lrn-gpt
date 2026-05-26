@@ -24,16 +24,19 @@ position embedding은 같은 token이라도 몇 번째 자리인지 알려준다
 | 5 | `05_token_embedding.py` | token ID가 embedding table의 한 행, 즉 vector로 바뀌는 과정을 본다. |
 | 6 | `06_token_and_position_embedding.py` | token vector에 position vector를 더해 Transformer 입력을 만든다. |
 
-전체를 한 번에 실행하려면 다음 명령을 사용한다.
-
-```bash
-python src/learning/download_the_verdict.py
-```
-
 개별 파일도 직접 실행할 수 있다.
 
 ```bash
 python src/learning/06_token_and_position_embedding.py
+```
+
+전체 흐름을 한 번에 다시 보고 싶으면 shell loop로 순서대로 실행한다.
+
+```bash
+for f in src/learning/0*.py; do
+  echo "===== $f ====="
+  python "$f"
+done
 ```
 
 ## 큰 흐름
@@ -49,6 +52,19 @@ python src/learning/06_token_and_position_embedding.py
 
 Tokenizer의 vocab은 `"lower" -> 1500`처럼 문자열 조각에 정수 ID를 붙인 것이다.
 Embedding은 `1500 -> vector`처럼 GPT 모델 내부에서 token ID를 계산 가능한 벡터로 바꾸는 layer다.
+
+조금 더 정확히 쓰면 Transformer에 바로 들어가는 값은 token embedding 하나가 아니라
+token embedding과 position embedding을 더한 `input_embeddings`다.
+
+```text
+token_embeddings = token_embedding_layer(inputs)
+pos_embeddings = pos_embedding_layer(positions)
+
+input_embeddings = token_embeddings + pos_embeddings
+```
+
+내가 말한 "알파 벡터"처럼 이해해도 된다. 다만 보통 용어로는 `input_embeddings`,
+즉 "Transformer에 들어가는 최종 입력 벡터"라고 부른다.
 
 ## MNIST처럼 보기
 
