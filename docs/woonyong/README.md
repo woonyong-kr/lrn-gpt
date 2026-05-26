@@ -18,7 +18,8 @@
 ## 중복을 줄이는 기준
 
 - Transformer의 수식, causal mask, GPT 계열 구조는 `01-transformer-gpt3.md`에서만 자세히 설명한다.
-- 벡터, 임베딩, word2vec, 멀티모달 embedding의 기본 직관은 `00-embedding-and-word2vec.md`에서 설명한다.
+- 벡터, 임베딩, word2vec, 멀티모달 embedding, token/position embedding의 기본 직관은 `00-embedding-and-word2vec.md`에서 설명한다.
+- parameter count, hidden layer 수, `d_model`, GPT-3 공개 구조의 관계는 `01-transformer-gpt3.md`에서 설명한다.
 - fine-tuning의 목적 함수와 학습 데이터 형태는 `02-fine-tuning.md`에서 정리한다.
 - BERT의 encoder-only 구조와 GPT와의 차이는 `03-bert-and-gpt.md`에서 설명한다.
 - 유해 콘텐츠 감지는 BERT 구조를 다시 설명하지 않고, 분류 파이프라인과 운영상 주의점에 집중한다.
@@ -34,6 +35,7 @@
 2. 각 토큰은 어떤 벡터가 되는가.
 3. 각 위치는 어떤 위치를 볼 수 있는가.
 4. 최종 출력은 다음 토큰인가, 클래스인가, 토큰별 태그인가.
+5. 학습 가능한 파라미터는 어느 행렬과 table에 들어 있는가.
 
 Transformer, GPT, BERT, fine-tuning, zero-shot, few-shot은 서로 다른 이름처럼 보이지만 결국 이 네 질문의 답이 조금씩 다르다. 호기심이 많을수록 용어를 외우기보다 "이 모델은 무엇을 보게 허락받았고, 무엇을 맞히도록 벌점을 받는가"를 따라가면 된다.
 

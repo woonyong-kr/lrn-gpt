@@ -336,6 +336,170 @@ GPT-3는 GPT-2와 같은 계열의 decoder-only Transformer를 매우 크게 확
 
 여기서 중요한 점은 GPT-3의 few-shot 능력이 "그 자리에서 weight를 바꾸는 학습"이 아니라는 것이다. 예시를 prompt 안에 넣으면, 모델은 그 예시를 문맥으로 읽고 다음 토큰을 예측한다. 이것을 in-context learning이라고 부른다.
 
+## 파라미터 수와 은닉층의 관계
+
+파라미터 수와 은닉층 수는 같은 말이 아니다.
+
+```text
+파라미터 수:
+모델 안에 있는 학습 가능한 숫자의 총합
+
+은닉층 수:
+Transformer block을 몇 번 쌓았는가
+```
+
+은닉층을 구조적으로 더 쌓는 것은 가능하다. 하지만 일반적인 GPT/Transformer에서는 층을 하나 추가할 때마다 그 층이 가진 attention 가중치와 feed-forward 가중치가 새로 생긴다. 그래서 층을 늘리면 보통 파라미터 수도 같이 늘어난다.
+
+Transformer에서 파라미터 수에 크게 영향을 주는 설계값은 다음이다.
+
+| 요소 | 의미 | 파라미터 증가 경향 |
+| --- | --- | --- |
+| `V` | vocabulary size | token embedding과 output projection 크기에 영향 |
+| `d_model` | hidden dimension, embedding dimension | 대부분의 행렬 크기에 제곱으로 영향 |
+| `d_ff` | feed-forward 내부 차원 | `d_model * d_ff`에 비례 |
+| `n_layers` | Transformer block 개수 | 거의 선형으로 증가 |
+| `n_heads` | attention head 개수 | 보통 `d_model`이 고정이면 총 파라미터는 크게 변하지 않음 |
+
+한 Transformer block을 아주 거칠게 보면 attention과 FFN으로 나뉜다.
+
+```text
+attention:
+Q, K, V, O projection
+대략 4 * d_model^2
+
+feed-forward:
+d_model -> d_ff -> d_model
+대략 2 * d_model * d_ff
+```
+
+GPT 계열에서는 보통 `d_ff = 4 * d_model` 정도로 잡는다. 그러면 한 block의 주요 파라미터 수는 대략 다음처럼 볼 수 있다.
+
+```text
+한 block 파라미터
+≈ 4 * d_model^2 + 2 * d_model * (4 * d_model)
+≈ 12 * d_model^2
+```
+
+전체 block 파라미터는 layer 수를 곱한다.
+
+```text
+전체 block 파라미터
+≈ n_layers * 12 * d_model^2
+```
+
+여기에 token embedding과 vocabulary projection이 더해진다.
+
+```text
+token embedding
+≈ vocab_size * d_model
+
+LM head
+≈ d_model * vocab_size
+```
+
+일부 GPT 구현은 token embedding과 LM head weight를 공유한다. 공유하면 이 부분의 파라미터가 줄어든다.
+
+## 깊이와 너비가 파라미터에 주는 차이
+
+층을 늘리는 것은 깊이를 늘리는 일이다.
+
+```text
+n_layers: 12 -> 24
+```
+
+다른 값이 같다면 파라미터 수는 대략 2배가 된다.
+
+반면 `d_model`을 늘리는 것은 너비를 늘리는 일이다.
+
+```text
+d_model: 768 -> 1536
+```
+
+attention과 FFN의 주요 행렬은 `d_model^2`에 가깝게 커진다. 그래서 `d_model`을 2배로 늘리면 block 안의 주요 파라미터는 대략 4배가 된다.
+
+예를 들어:
+
+```text
+d_model = 768
+한 block ≈ 12 * 768^2 ≈ 7.1M
+
+d_model = 1536
+한 block ≈ 12 * 1536^2 ≈ 28.3M
+```
+
+즉 층 수는 보통 선형으로, hidden dimension은 제곱에 가깝게 파라미터 수를 키운다.
+
+```text
+깊이를 키운다:
+더 많은 단계의 추상화와 변환을 거칠 수 있음
+
+너비를 키운다:
+각 위치의 hidden state가 더 많은 정보를 담을 수 있음
+```
+
+둘 다 모델 용량을 키우지만 성격이 다르다.
+
+## 은닉층을 늘려도 파라미터가 안 늘어나는 경우
+
+일반적인 GPT block은 층마다 독립 가중치를 가지므로 층을 늘리면 파라미터가 늘어난다. 하지만 예외도 있다.
+
+```text
+1. weight sharing
+   여러 층이 같은 가중치를 재사용하면 계산 깊이는 늘어도 파라미터는 덜 늘어난다.
+
+2. parameter-free operation
+   ReLU, dropout 같은 연산은 학습 파라미터가 거의 없다.
+
+3. recurrent reuse
+   RNN처럼 같은 가중치를 여러 time step에 반복 적용하면 sequence 처리 깊이는 늘지만 파라미터는 공유된다.
+
+4. MoE
+   전체 expert 파라미터는 크지만 입력마다 일부 expert만 활성화될 수 있다.
+```
+
+그래서 더 정확한 문장은 다음이다.
+
+```text
+은닉층은 설계상 늘릴 수 있다.
+하지만 일반적인 GPT/Transformer에서는 새 층마다 새 가중치가 생기므로 파라미터도 늘어난다.
+```
+
+## 공개된 GPT 구조를 볼 때 주의할 점
+
+GPT-3 175B는 논문에 구조가 공개된 대표적인 대형 GPT 모델이다.
+
+```text
+GPT-3 175B:
+layers = 96
+d_model = 12288
+heads = 96
+context length = 2048
+parameter count ≈ 175B
+```
+
+입력 token embedding table만 단순 계산해도 다음 정도다.
+
+```text
+vocab_size ≈ 50257
+d_model = 12288
+
+token embedding params
+≈ 50257 * 12288
+≈ 617M
+```
+
+하지만 전체 175B에서 가장 큰 비중은 embedding 하나가 아니라, 96개의 Transformer block 안에 있는 attention과 FFN 가중치들이다.
+
+최신 상용 모델이나 Codex 계열 모델은 내부 `d_model`, layer 수, 정확한 parameter count가 공개되지 않는 경우가 많다. 그래서 "지금 내가 쓰는 Codex는 몇 차원 embedding을 쓰는가" 같은 질문에는 공개 문서가 없는 한 정확히 답할 수 없다.
+
+공부할 때는 특정 비공개 모델 숫자보다 다음 관계를 붙잡는 것이 더 중요하다.
+
+```text
+vocab_size가 커지면 embedding/projection 파라미터가 커진다.
+d_model이 커지면 대부분의 block 파라미터가 크게 커진다.
+n_layers가 커지면 block 파라미터가 층 수만큼 누적된다.
+```
+
 ## GPT와 원 논문 Transformer의 가장 중요한 차이
 
 원 논문 Transformer는 encoder와 decoder가 모두 있다. GPT는 decoder-only다.
@@ -428,9 +592,11 @@ logits: (B, T, vocab_size)
 3. attention은 위치 사이를 섞고, FFN은 같은 위치의 벡터를 바꾼다는 말은 무슨 뜻인가.
 4. GPT-3의 few-shot은 fine-tuning인가, in-context learning인가.
 5. sequence length를 2배로 늘리면 attention memory는 대략 몇 배가 되는가.
+6. `n_layers`를 2배로 늘리는 것과 `d_model`을 2배로 늘리는 것은 파라미터 수에 어떻게 다르게 작용하는가.
+7. token embedding table이 전체 파라미터의 전부가 아닌 이유는 무엇인가.
+8. 비공개 상용 모델의 정확한 embedding dimension을 함부로 단정하면 안 되는 이유는 무엇인가.
 
 ## 참고
 
 - Vaswani et al., 2017, [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
 - Brown et al., 2020, [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
-

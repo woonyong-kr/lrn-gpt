@@ -289,6 +289,403 @@ Transformer layer 이후:
 | 다의어 처리 | 약함 | 강함 |
 | 대표 사용 | 단어 유사도, 고전 NLP feature | LLM, BERT, GPT, embedding search |
 
+## PyTorch Embedding 예제
+
+토큰 임베딩을 가장 단순하게 보면 "토큰 ID로 embedding table의 한 행을 꺼내는 일"이다.
+
+```python
+import torch
+
+input_ids = torch.tensor([2, 3, 5, 1])
+vocab_size = 6
+output_dim = 3
+
+torch.manual_seed(123)
+embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
+
+print(embedding_layer.weight)
+print(embedding_layer(torch.tensor([3])))
+print(embedding_layer(input_ids))
+```
+
+여기서 `vocab_size = 6`은 토큰 ID가 `0`부터 `5`까지 있다는 뜻이다. `output_dim = 3`은 각 토큰을 3차원 벡터로 바꾼다는 뜻이다.
+
+따라서 embedding table의 크기는 다음과 같다.
+
+```text
+vocab_size x output_dim = 6 x 3
+```
+
+개념적으로는 이런 표다.
+
+```text
+ID 0 -> [ ..., ..., ... ]
+ID 1 -> [ ..., ..., ... ]
+ID 2 -> [ ..., ..., ... ]
+ID 3 -> [ ..., ..., ... ]
+ID 4 -> [ ..., ..., ... ]
+ID 5 -> [ ..., ..., ... ]
+```
+
+실행하면 `embedding_layer.weight`는 6행 3열짜리 matrix다.
+
+```text
+Parameter containing:
+tensor([[ 0.3374, -0.1778, -0.1690],
+        [ 0.9178,  1.5810,  1.3010],
+        [ 1.2753, -0.2010, -0.1606],
+        [-0.4015,  0.9666, -1.1481],
+        [-1.1589,  0.3255, -0.6315],
+        [-2.8400, -0.7849, -1.4096]], requires_grad=True)
+```
+
+`embedding_layer(torch.tensor([3]))`은 3번 ID에 해당하는 행을 꺼낸다.
+
+```text
+tensor([[-0.4015, 0.9666, -1.1481]])
+```
+
+즉 다음과 같다.
+
+```text
+token ID 3 -> embedding table의 3번 행
+```
+
+`input_ids = [2, 3, 5, 1]`을 넣으면 각 ID의 행을 순서대로 꺼낸다.
+
+```text
+input IDs:
+[2, 3, 5, 1]
+
+embedding output:
+[
+  embedding[2],
+  embedding[3],
+  embedding[5],
+  embedding[1],
+]
+```
+
+이것이 token embedding이다.
+
+```text
+문자열 -> tokenizer -> token ID -> embedding table lookup -> vector
+```
+
+중요한 점은 토큰 ID 숫자 자체에는 의미가 없다는 것이다. `3`이라는 숫자가 의미를 담는 게 아니다. `3`은 embedding table의 3번 행을 가리키는 주소다. 의미는 학습이 진행되면서 그 행의 벡터 값에 들어간다.
+
+처음 embedding weight는 보통 무작위로 시작한다.
+
+```text
+학습 전:
+ID 3 -> 무작위 벡터
+
+학습 후:
+ID 3 -> 문맥과 task에 맞게 조정된 벡터
+```
+
+## output_dim은 왜 3일 수도 있고 더 클 수도 있는가
+
+예제에서 `output_dim = 3`을 쓴 이유는 사람이 눈으로 보기 쉽게 하기 위해서다. 실제 LLM에서는 3차원으로는 너무 좁다. 토큰 하나가 문법, 의미, 어조, 주제, 위치적 역할, 다른 단어와의 관계 같은 많은 정보를 담아야 하기 때문이다.
+
+```text
+toy example:
+token ID -> 3차원 vector
+
+실제 GPT/BERT 계열:
+token ID -> 768차원, 1024차원, 4096차원, 12288차원 ...
+```
+
+차원이 늘어난다는 말은 "모델이 단어를 설명할 수 있는 좌표축이 많아진다"는 뜻에 가깝다. 다만 이 좌표축은 사람이 직접 이름 붙인 축이 아니다.
+
+예를 들어 사람이 설명할 때는 다음처럼 말할 수 있다.
+
+```text
+사과:
+- 과일
+- 음식
+- 달다
+- 빨갛다
+- 먹다와 자주 등장
+
+바나나:
+- 과일
+- 음식
+- 달다
+- 노랗다
+- 먹다와 자주 등장
+
+왕:
+- 사람
+- 권력
+- 왕국
+- 남성형 문맥
+- 역사 문맥
+```
+
+하지만 실제 embedding vector의 각 차원이 반드시 이런 식으로 깔끔하게 대응되지는 않는다.
+
+```text
+사과 -> [0.21, -0.77, 1.02, 0.13, ...]
+바나나 -> [0.19, -0.70, 0.95, 0.18, ...]
+왕 -> [-0.31, 1.44, -0.12, 0.88, ...]
+```
+
+사람이 `0번 차원은 과일성`, `1번 차원은 권력성`처럼 직접 정하는 것이 아니다. 모델은 다음 토큰 예측, 분류, contrastive learning 같은 학습 목표를 잘 맞히도록 loss를 줄이는 과정에서 벡터 값을 조정한다. 그 결과 비슷한 문맥에서 쓰이는 토큰들은 벡터 공간에서 비슷한 방향이나 가까운 위치를 갖게 된다.
+
+정리하면 다음과 같다.
+
+```text
+사람이 의미 축을 직접 설계하지 않는다.
+학습 데이터의 문맥과 loss가 embedding weight를 움직인다.
+그 결과 의미적으로 비슷한 토큰들이 가까워지는 경향이 생긴다.
+```
+
+## embedding weight도 역전파로 학습되는 파라미터다
+
+`torch.nn.Embedding(vocab_size, output_dim)`이 만드는 `weight`는 그냥 lookup table처럼 보이지만, 실제로는 학습 가능한 파라미터다.
+
+```text
+embedding weight shape:
+(vocab_size, output_dim)
+```
+
+예를 들어:
+
+```text
+vocab_size = 50000
+output_dim = 768
+```
+
+이면 token embedding만 해도:
+
+```text
+50000 x 768 = 38,400,000
+```
+
+개의 학습 가능한 숫자를 가진다.
+
+처음에는 보통 랜덤 값으로 시작한다.
+
+```text
+초기:
+ID 391 -> 랜덤 벡터
+```
+
+훈련 중 모델이 어떤 입력에서 loss를 계산하면, 역전파는 embedding table에도 gradient를 보낸다.
+
+```text
+loss
+  -> output layer
+  -> Transformer blocks
+  -> embedding output
+  -> embedding weight의 특정 행
+```
+
+입력에 token ID `391`이 있었다면, `embedding.weight[391]`에 대한 gradient가 생긴다.
+
+```text
+embedding.weight[391] <- embedding.weight[391] - learning_rate * gradient
+```
+
+이것은 일반 신경망에서 `W`가 `dW`로 업데이트되는 것과 같은 개념이다. 차이는 embedding layer가 matrix multiplication처럼 보이지 않고, "ID로 행을 꺼내는 lookup"처럼 보인다는 점뿐이다.
+
+## output_dim이 커진다는 것은 무엇을 얻는다는 뜻인가
+
+`output_dim`이 커지면 토큰 하나를 표현하는 벡터의 길이가 길어진다.
+
+```text
+output_dim = 3:
+사과 -> [0.2, -0.1, 0.8]
+
+output_dim = 768:
+사과 -> [0.2, -0.1, 0.8, ..., 0.03]
+```
+
+차원이 커지면 모델은 더 많은 패턴을 분리해서 표현할 여지를 얻는다. 단어의 의미, 문법적 성질, 자주 함께 나오는 단어, 문장 안 역할, domain, 말투 같은 여러 신호가 고차원 공간에 더 풍부하게 배치될 수 있다.
+
+하지만 무조건 크게 하면 좋은 것은 아니다.
+
+```text
+장점:
+- 더 복잡한 관계를 표현할 수 있음
+- 큰 모델에서 더 풍부한 hidden state를 만들 수 있음
+- attention과 FFN이 다룰 정보량이 커짐
+
+비용:
+- 파라미터 수 증가
+- 메모리 사용량 증가
+- 계산량 증가
+- 데이터가 부족하면 과적합 위험 증가
+```
+
+그래서 `output_dim`은 "신경망이 더 정교해질 수 있는 용량"을 늘리는 설계값이다. 다만 정교함은 차원만으로 생기지 않는다. 충분한 데이터, 적절한 모델 크기, 안정적인 학습, 좋은 목적 함수가 함께 필요하다.
+
+Transformer에서는 보통 이 embedding dimension이 곧 `d_model`이다.
+
+```text
+token embedding output: (B, T, d_model)
+Transformer hidden state: (B, T, d_model)
+```
+
+즉 토큰이 처음 벡터가 되는 차원과 Transformer 내부에서 계속 들고 다니는 은닉 상태 차원이 같은 경우가 많다.
+
+## MNIST 픽셀과 텍스트 토큰의 차이
+
+MNIST 이미지는 처음부터 숫자 배열이다.
+
+```text
+28 x 28 grayscale image
+-> 784 pixel values
+```
+
+각 픽셀 값은 어느 정도 직접적인 의미를 가진다.
+
+```text
+0.0 = 어두움
+1.0 = 밝음
+```
+
+반면 텍스트의 token ID는 숫자이지만, 숫자 크기 자체에 의미가 없다.
+
+```text
+"apple" -> 391
+"banana" -> 12482
+```
+
+여기서 `12482`가 `391`보다 더 크다고 해서 바나나가 사과보다 더 크거나 더 중요하다는 뜻은 아니다. token ID는 embedding table의 행 번호일 뿐이다.
+
+```text
+MNIST:
+픽셀값 자체가 입력 특징
+
+텍스트:
+token ID는 주소
+embedding vector가 입력 특징
+```
+
+그래서 텍스트 모델은 보통 다음 단계를 거친다.
+
+```text
+문자열
+  -> tokenizer
+  -> token IDs
+  -> embedding lookup
+  -> vectors
+  -> Transformer
+```
+
+이미지 모델도 결국 내부에서는 특징 벡터를 학습하지만, 텍스트는 특히 token ID가 범주형 값이기 때문에 embedding layer가 거의 필수적으로 들어간다.
+
+## 같은 단어가 여러 번 나오면 벡터를 복사하는가
+
+문장 안에 같은 토큰이 여러 번 나오면 token ID는 같다.
+
+```text
+apple apple apple
+-> [391, 391, 391]
+```
+
+embedding lookup을 하면 같은 embedding row를 여러 위치에서 가져온다.
+
+```text
+[
+  E[391],
+  E[391],
+  E[391],
+]
+```
+
+이때 새로운 단어를 vocabulary에 등록하는 것이 아니다. `E[391]`이라는 하나의 학습 파라미터 행을 이번 batch의 각 위치에 펼쳐 놓는 것에 가깝다.
+
+계산 그래프 안에서는 각 위치에 벡터가 따로 있는 것처럼 보인다.
+
+```text
+position 0 -> E[391]
+position 1 -> E[391]
+position 2 -> E[391]
+```
+
+하지만 근원은 같은 embedding table row다. 그래서 역전파 때 같은 토큰이 여러 위치에서 쓰였다면, 그 위치들에서 온 gradient가 같은 row 업데이트에 합쳐진다.
+
+```text
+loss from position 0
+loss from position 1
+loss from position 2
+  -> embedding.weight[391] update
+```
+
+이것을 "복사해서 새로 등록한다"라고 이해하면 조금 틀린다. 더 정확히는 다음과 같다.
+
+```text
+같은 token ID는 같은 embedding row를 조회한다.
+문장 계산을 위해 각 위치에 같은 값을 펼쳐 놓는다.
+vocab에 새 항목을 만들지는 않는다.
+```
+
+## token embedding과 position embedding은 왜 더하는가
+
+토큰 임베딩만 있으면 같은 토큰은 언제나 같은 벡터로 시작한다.
+
+```text
+apple apple
+-> [391, 391]
+-> [E[391], E[391]]
+```
+
+이 상태만 보면 첫 번째 `apple`과 두 번째 `apple`은 구분되지 않는다. 그러나 Transformer는 문장 안 순서가 중요하다.
+
+```text
+개가 사람을 물었다
+사람이 개를 물었다
+```
+
+등장하는 단어가 비슷해도 위치가 바뀌면 의미가 바뀐다. 그래서 각 위치에 position embedding을 더한다.
+
+```text
+첫 번째 apple = E[391] + P[0]
+두 번째 apple = E[391] + P[1]
+```
+
+여기서 `E`는 token embedding table이고, `P`는 position embedding table이다.
+
+```text
+E[token_id] = 이 토큰이 무엇인가
+P[position] = 이 토큰이 몇 번째 자리에 있는가
+```
+
+최종 입력은 두 정보를 합친 것이다.
+
+```text
+input_vector[t] = token_embedding[token_id[t]] + position_embedding[t]
+```
+
+따라서 같은 토큰이라도 위치가 다르면 Transformer에 들어가는 첫 입력 벡터가 달라진다.
+
+```text
+같은 단어 + 다른 위치
+-> 다른 입력 벡터
+-> attention에서 다른 역할 가능
+```
+
+중요한 점은 position embedding이 token embedding을 "복사해서 새 단어로 등록"하는 것이 아니라는 점이다. 위치 벡터는 token vocabulary와 별개의 table에서 나온다.
+
+```text
+token embedding table:
+vocab_size x d_model
+
+position embedding table:
+context_length x d_model
+```
+
+예를 들어 context length가 1024이고 `d_model = 768`이면 position embedding table은 다음 크기다.
+
+```text
+1024 x 768
+```
+
+0번째 위치, 1번째 위치, 2번째 위치마다 별도의 위치 벡터가 있고, 이 벡터를 해당 자리의 token vector에 더한다. 이것이 "이 토큰이 무엇인가"와 "어디에 있는가"를 동시에 알려주는 방식이다.
+
 ## Token embedding과 contextual embedding 구분
 
 Transformer를 공부할 때는 두 embedding을 구분해야 한다.
@@ -369,9 +766,11 @@ input token ids
 3. word2vec의 "비슷한 문맥에 나오는 단어는 비슷하다"는 말은 어떤 뜻인가.
 4. `배를 먹었다`와 `배를 탔다`에서 word2vec가 약한 이유는 무엇인가.
 5. Transformer의 token embedding과 contextual embedding은 무엇이 다른가.
+6. token ID 숫자 자체가 의미를 담는 것이 아니라면, 의미는 어디에 저장되는가.
+7. 같은 token ID가 여러 번 등장할 때 embedding table에는 어떤 일이 일어나는가.
+8. token embedding과 position embedding을 더하는 이유는 무엇인가.
 
 ## 참고
 
 - Mikolov et al., 2013, [Efficient Estimation of Word Representations in Vector Space](https://arxiv.org/abs/1301.3781)
 - Vaswani et al., 2017, [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
-
