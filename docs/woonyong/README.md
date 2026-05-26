@@ -14,10 +14,12 @@
 | 5 | [05-zero-shot-few-shot.md](05-zero-shot-few-shot.md) | 제로샷과 퓨샷 학습은 무엇이 다른가 |
 | 6 | [06-byte-pair-encoding.md](06-byte-pair-encoding.md) | BPE는 언제 세고 언제 병합하는가 |
 | 7 | [07-project-completion-roadmap.md](07-project-completion-roadmap.md) | 프로젝트를 완성하려면 무엇을 구현해야 하는가 |
+| 8 | [08-attention-mechanisms.md](08-attention-mechanisms.md) | self-attention, causal attention, multi-head attention은 무엇이 다른가 |
 
 ## 중복을 줄이는 기준
 
-- Transformer의 수식, causal mask, GPT 계열 구조는 `01-transformer-gpt3.md`에서만 자세히 설명한다.
+- Transformer의 전체 구조와 GPT-3 맥락은 `01-transformer-gpt3.md`에서 설명한다.
+- attention 종류별 차이와 구현 감각은 `08-attention-mechanisms.md`에서 설명한다.
 - 벡터, 임베딩, word2vec, 멀티모달 embedding, token/position embedding의 기본 직관은 `00-embedding-and-word2vec.md`에서 설명한다.
 - parameter count, hidden layer 수, `d_model`, GPT-3 공개 구조의 관계는 `01-transformer-gpt3.md`에서 설명한다.
 - fine-tuning의 목적 함수와 학습 데이터 형태는 `02-fine-tuning.md`에서 정리한다.
