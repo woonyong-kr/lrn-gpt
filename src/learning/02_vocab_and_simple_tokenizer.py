@@ -4,6 +4,9 @@
 여기서 처음으로 "문자열 조각 -> token ID"가 생긴다.
 하지만 이것도 아직 vector가 아니다. 391, 1500 같은 숫자는 embedding table의
 행을 찾기 위한 주소라고 생각하면 된다.
+
+책의 이 단계는 tokenizer가 하는 일을 손으로 확인하는 구간이다.
+vocab은 신경망 가중치가 아니라, 문자열과 정수 ID를 연결하는 lookup table이다.
 """
 
 from common import (
@@ -25,6 +28,9 @@ def main() -> None:
     vocab = build_vocab(preprocessed)
     print("vocab size:", len(vocab))
 
+    # 앞쪽 vocab 항목을 출력하면 token ID가 어떻게 부여되었는지 볼 수 있다.
+    # 지금 toy vocab은 sorted(set(tokens))라서 문자열 정렬 순서대로 ID가 붙는다.
+    # 실제 BPE vocab은 병합 학습 결과와 special token 정책에 따라 ID가 정해진다.
     print("\n처음 52개 vocab 항목:")
     for i, item in enumerate(vocab.items()):
         print(item)
@@ -59,6 +65,9 @@ Mrs. Gisburn said with pardonable pride. """
     print(text)
     print("ids:")
     print(ids)
+
+    # decode 결과에 <|unk|>가 보이면 그 위치의 원래 문자열 정보는 사라진 것이다.
+    # 이 한계를 보면 BPE가 왜 "낯선 단어를 작은 조각으로 표현"하려 하는지 이해된다.
     print("decode:")
     print(tokenizer_v2.decode(ids))
 
