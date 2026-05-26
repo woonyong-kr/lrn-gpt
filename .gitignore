@@ -5,6 +5,7 @@ data/nsmc_lm_*.txt
 data/nsmc_sentiment_*.jsonl
 data/vocab_*.json
 data/*.jsonl
+src/learning/the-verdict.txt
 
 # Python
 __pycache__/
