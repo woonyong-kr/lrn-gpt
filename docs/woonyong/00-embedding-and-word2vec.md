@@ -660,6 +660,35 @@ P[position] = 이 토큰이 몇 번째 자리에 있는가
 input_vector[t] = token_embedding[token_id[t]] + position_embedding[t]
 ```
 
+다르게 말하면, 입력 벡터 자체는 두 종류의 벡터를 더해서 만든다.
+
+```text
+토큰 ID
+  -> token embedding
+  -> "이 토큰이 무엇인가" 벡터
+
+위치 번호
+  -> position embedding
+  -> "이 토큰이 몇 번째 자리에 있는가" 벡터
+
+token embedding + position embedding
+  -> input embedding
+  -> Transformer가 실제로 받는 입력 벡터
+```
+
+사용자가 말한 "알파 벡터"에 해당하는 값은 보통 `input embedding`이라고 부르면 된다. 새 token을 만든 것이 아니라, 이미 얻은 token vector와 position vector를 같은 차원에서 더해 **학습에 사용할 최종 입력 벡터**를 만든 것이다.
+
+예를 들어 40번 token이 0번 위치에 있다면 다음과 같다.
+
+```text
+token ID 40 -> E[40]
+position 0 -> P[0]
+
+input embedding at position 0 = E[40] + P[0]
+```
+
+이 `E[40] + P[0]`가 Transformer block으로 들어간다. 학습 중 역전파가 일어나면 token embedding table의 `E[40]`도 조정될 수 있고, learned absolute position embedding을 쓰는 경우 position embedding table의 `P[0]`도 조정될 수 있다.
+
 따라서 같은 토큰이라도 위치가 다르면 Transformer에 들어가는 첫 입력 벡터가 달라진다.
 
 ```text
