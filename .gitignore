@@ -42,3 +42,7 @@ notion/
 .DS_Store
 *.swp
 *~
+
+llmBook
+the-verdict.txt
+test.py
