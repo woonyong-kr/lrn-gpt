@@ -61,28 +61,6 @@ class BPETokenizer:
             self.id_to_token[i] = bytes([i - 4])
             self.token_to_id[bytes([i - 4])] = i
 
-        for token, idx in SPECIAL_IDS.items():
-            self.id_to_token[idx] = token
-            self.token_to_id[token] = idx
-
-        for byte_value in range(NUM_BYTES):
-            token_id = BYTE_OFFSET + byte_value
-            '''bytes([정수])
-            정수를 bytes객체로 바꾸는 코드
-
-            bytes([97])
-            # b'a'
-
-            bytes([0])
-            # b'\x00'
-
-            bytes([236])
-            # b'\xec'
-            '''
-            byte_token = bytes([byte_value])
-            self.id_to_token[token_id] = byte_token
-            self.token_to_id[byte_token] = token_id
-
 #region GETTER
     def get_pad_id(self):
         """padding 토큰 ID."""
@@ -133,13 +111,6 @@ class BPETokenizer:
                 
                 word_pair[pair] += 1
 
-                # pair = (words[i], words[i+1])
-
-                # if pair not in word_pair:
-                #     word_pair[pair] = 0
-
-                # word_pair[pair] += 1
-
             # pair = b'\x02\x07' 같이 튜플로 만들어져있음. 포문 첫 줄
             # 그 페어들의 목록 중 가장 많이 나온 페어 확인
             best_pair = max(word_pair, key=lambda x: word_pair[x])
@@ -184,7 +155,7 @@ class BPETokenizer:
             "merges" : merges 
         }
 
-        with open("data/bpe_data.json", "w", encoding = "utf-8") as f:
+        with open(path, "w", encoding = "utf-8") as f:
             json.dump(total_data, f)
 
     def load(self, path: str | Path):
@@ -193,7 +164,7 @@ class BPETokenizer:
         """
 
         # data 호출
-        with open("data/bpe_data.json", "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # k, v => vocab의 key, value
@@ -219,27 +190,29 @@ class BPETokenizer:
         #1. UTF-8 byte ID 리스트를 만듭니다.
         byte_ids  = text.encode("utf-8") #문자열을 UTF-8 bytes 객체로 바꿈
         token_ids = []
+        # +4 맞추기 용도인듯
         for byte in byte_ids:
             token_id = BYTE_OFFSET + byte
             token_ids.append(token_id)
 
         #2. train/load에서 얻은 merge rule을 학습 순서대로 적용
         for rule in self.merges:
-
             new_token_ids = []
-
             index = 0
-            while(index < len(token_ids)):
+            while index < len(token_ids) - 1:
                 set = (token_ids[index], token_ids[index+1])
-                if(set == rule):
-                    merged_token_id = self.token_to_id[rule]
+                if set == rule:
+                    merged_bytes = self.id_to_token[rule[0]] + self.id_to_token[rule[1]]
+                    merged_token_id = self.token_to_id[merged_bytes]
                     new_token_ids.append(merged_token_id)
                     index += 2
                 else:
                     new_token_ids.append(token_ids[index])
-                    index+=1
-            
-            #룰 적용한 token_id로 업데이트
+                    index += 1
+
+            if index < len(token_ids):
+                new_token_ids.append(token_ids[index])
+
             token_ids = new_token_ids
 
 
