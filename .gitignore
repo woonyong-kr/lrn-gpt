@@ -43,6 +43,7 @@ notion/
 *.swp
 *~
 
-llmBook
-the-verdict.txt
-test.py
+# 개인 프로젝트 공간
+local/*
+local/
+local
