@@ -39,9 +39,7 @@ class BPETokenizer:
         require(min_frequency > 0, "min_frequency must be positive")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self.id_to_token = {}
-        self.token_to_id = {}
-        self.merges = []
+        self._init_special_tokens()
 
     def _init_special_tokens(self):
         """특수 토큰 4개와 원본 byte 256개를 vocabulary에 등록합니다."""
@@ -143,9 +141,6 @@ class BPETokenizer:
         학습된 merge rule을 순서대로 적용해야 train 때 만든 tokenization
         기준과 encode 때 기준이 같아집니다.
         """
-        if not self.id_to_token:
-            self._init_special_tokens()
-
         ids = [BYTE_OFFSET + byte for byte in text.encode("utf-8")]
         for pair in self.merges:
             new_id = self.token_to_id.get(pair)
