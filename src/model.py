@@ -54,16 +54,25 @@ class FeedForward(nn.Module):
         if mult <= 0:
             raise ValueError("mult must be positive")
         hidden_dim = mult * d_model
-        self.net = nn.Sequential(
-            nn.Linear(d_model, hidden_dim),
-            GELU(),
-            nn.Linear(hidden_dim, d_model),
-            nn.Dropout(dropout),
-        )
+        self.linear1 = nn.Linear(d_model, hidden_dim)
+        self.activation = GELU()
+        self.linear2 = nn.Linear(hidden_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """FeedForward 네트워크를 통과시킵니다."""
-        return self.net(x)
+        hidden = self._expand_features(x)
+        activated = self.activation(hidden)
+        projected = self._project_back(activated)
+        return self.dropout(projected)
+
+    def _expand_features(self, x: torch.Tensor) -> torch.Tensor:
+        """Linear1: 각 token 벡터를 더 넓은 FFN 차원으로 펼칩니다."""
+        return self.linear1(x)
+
+    def _project_back(self, x: torch.Tensor) -> torch.Tensor:
+        """Linear2: FFN 차원을 다시 d_model 차원으로 되돌립니다."""
+        return self.linear2(x)
 
 
 class TransformerBlock(nn.Module):
@@ -91,13 +100,33 @@ class TransformerBlock(nn.Module):
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """attention과 ffn을 residual connection으로 연결합니다."""
         if self.norm_first:
-            x = x + self.att(self.ln1(x), causal_mask=causal_mask)
-            x = x + self.ffn(self.ln2(x))
-            return x
+            return self._forward_pre_norm(x, causal_mask)
 
-        x = self.ln1(x + self.att(x, causal_mask=causal_mask))
-        x = self.ln2(x + self.ffn(x))
-        return x
+        return self._forward_post_norm(x, causal_mask)
+
+    def _forward_pre_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
+        """Pre-LN block: LayerNorm을 각 sub-layer 앞에서 적용합니다."""
+        x = x + self.att(self.ln1(x), causal_mask=causal_mask)
+        return x + self.ffn(self.ln2(x))
+
+    def _forward_post_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
+        """Post-LN block: residual add 뒤에 LayerNorm을 적용합니다."""
+        x = self._attention_residual_post_norm(x, causal_mask)
+        return self._ffn_residual_post_norm(x)
+
+    def _attention_residual_post_norm(
+        self,
+        x: torch.Tensor,
+        causal_mask: bool,
+    ) -> torch.Tensor:
+        """X + MultiHeadAttention(X)를 만든 뒤 첫 번째 LayerNorm을 적용합니다."""
+        attention_out = self.att(x, causal_mask=causal_mask)
+        return self.ln1(x + attention_out)
+
+    def _ffn_residual_post_norm(self, x: torch.Tensor) -> torch.Tensor:
+        """LayerNorm 결과 + FFN 결과를 만든 뒤 두 번째 LayerNorm을 적용합니다."""
+        ffn_out = self.ffn(x)
+        return self.ln2(x + ffn_out)
 
 
 class GPTModel(nn.Module):
@@ -119,7 +148,31 @@ class GPTModel(nn.Module):
         norm_first = self.config.get("norm_first", False)
 
         self.embedding = InputEmbedding(vocab_size, emb_dim, context_length, drop_rate)
-        self.blocks = nn.ModuleList(
+        self.blocks = self._build_blocks(
+            n_layers=n_layers,
+            emb_dim=emb_dim,
+            n_heads=n_heads,
+            drop_rate=drop_rate,
+            qkv_bias=qkv_bias,
+            ffn_mult=ffn_mult,
+            norm_first=norm_first,
+        )
+        self.final_norm = LayerNorm(emb_dim)
+        self.lm_head = nn.Linear(emb_dim, vocab_size, bias=False)
+        self.apply(lambda module: init_gpt_weights(module, self.config.get("init_std", 0.02)))
+
+    def _build_blocks(
+        self,
+        n_layers: int,
+        emb_dim: int,
+        n_heads: int,
+        drop_rate: float,
+        qkv_bias: bool,
+        ffn_mult: int,
+        norm_first: bool,
+    ) -> nn.ModuleList:
+        """같은 구조의 TransformerBlock을 n_layers개 쌓습니다."""
+        return nn.ModuleList(
             [
                 TransformerBlock(
                     emb_dim,
@@ -132,9 +185,6 @@ class GPTModel(nn.Module):
                 for _ in range(n_layers)
             ]
         )
-        self.final_norm = LayerNorm(emb_dim)
-        self.lm_head = nn.Linear(emb_dim, vocab_size, bias=False)
-        self.apply(lambda module: init_gpt_weights(module, self.config.get("init_std", 0.02)))
 
     def forward(
         self,
@@ -149,23 +199,36 @@ class GPTModel(nn.Module):
             targets가 있으면 (loss, logits)
         """
         hidden = self.forward_hidden(idx)
-        logits = self.lm_head(hidden)
+        logits = self._to_logits(hidden)
 
         if targets is None:
             return logits
 
-        loss = F.cross_entropy(
-            logits.reshape(-1, logits.size(-1)),
-            targets.reshape(-1),
-        )
+        loss = self._loss(logits, targets)
         return loss, logits
 
     def forward_hidden(self, idx: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """LM head 직전 hidden state를 반환합니다. 분류 head 재사용용입니다."""
         x = self.embedding(idx)
+        x = self._apply_blocks(x, causal_mask)
+        return self.final_norm(x)
+
+    def _apply_blocks(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
+        """embedding X를 TransformerBlock 1..N에 순서대로 통과시킵니다."""
         for block in self.blocks:
             x = block(x, causal_mask=causal_mask)
-        return self.final_norm(x)
+        return x
+
+    def _to_logits(self, hidden: torch.Tensor) -> torch.Tensor:
+        """hidden state를 vocab 전체에 대한 다음 토큰 점수로 바꿉니다."""
+        return self.lm_head(hidden)
+
+    def _loss(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """각 위치의 logits와 target token ID를 cross entropy로 비교합니다."""
+        return F.cross_entropy(
+            logits.reshape(-1, logits.size(-1)),
+            targets.reshape(-1),
+        )
 
 
 def generate_text_simple(

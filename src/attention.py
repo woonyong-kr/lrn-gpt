@@ -54,33 +54,70 @@ class MultiHeadAttention(nn.Module):
         """
         if x.ndim != 3:
             raise ValueError("MultiHeadAttention input must have shape (B, T, C)")
-        batch_size, seq_len, d_model = x.shape
-        if d_model != self.d_model:
-            raise ValueError(f"Expected d_model={self.d_model}, got {d_model}")
-
-        queries = self._split_heads(self.W_query(x))
-        keys = self._split_heads(self.W_key(x))
-        values = self._split_heads(self.W_value(x))
-
-        scores = queries @ keys.transpose(-2, -1)
-        scores = scores / (self.head_dim ** 0.5)
-
+        seq_len = self._validate_embedding_dim(x)
+        queries, keys, values = self._project_qkv(x)
+        scores = self._scaled_attention_scores(queries, keys)
         if causal_mask:
-            mask = torch.triu(
-                torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device),
-                diagonal=1,
-            )
-            scores = scores.masked_fill(mask, float("-inf"))
+            scores = self._apply_causal_mask(scores, seq_len)
 
-        attn_weights = F.softmax(scores, dim=-1)
-        attn_weights = self.attn_dropout(attn_weights)
-        context = attn_weights @ values
-        context = self._merge_heads(context)
-        out = self.resid_dropout(self.out_proj(context))
+        attn_weights = self._attention_weights(scores)
+        context = self._context_from_values(attn_weights, values)
+        out = self._output_projection(context)
 
         if return_attention_weights:
             return out, attn_weights
         return out
+
+    def _validate_embedding_dim(self, x: torch.Tensor) -> int:
+        """입력의 마지막 차원이 모델 차원과 같은지 확인하고 seq_len을 반환합니다."""
+        _, seq_len, d_model = x.shape
+        if d_model != self.d_model:
+            raise ValueError(f"Expected d_model={self.d_model}, got {d_model}")
+        return seq_len
+
+    def _project_qkv(
+        self,
+        x: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """입력 X에서 head별 Q, K, V를 만듭니다."""
+        queries = self._split_heads(self.W_query(x))
+        keys = self._split_heads(self.W_key(x))
+        values = self._split_heads(self.W_value(x))
+        return queries, keys, values
+
+    def _scaled_attention_scores(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+    ) -> torch.Tensor:
+        """Q와 K의 내적을 head_dim으로 스케일링합니다."""
+        scores = queries @ keys.transpose(-2, -1)
+        return scores / (self.head_dim ** 0.5)
+
+    def _apply_causal_mask(self, scores: torch.Tensor, seq_len: int) -> torch.Tensor:
+        """미래 token 위치의 score를 -inf로 바꿉니다."""
+        mask = torch.triu(
+            torch.ones(seq_len, seq_len, dtype=torch.bool, device=scores.device),
+            diagonal=1,
+        )
+        return scores.masked_fill(mask, float("-inf"))
+
+    def _attention_weights(self, scores: torch.Tensor) -> torch.Tensor:
+        """score row마다 softmax를 적용해 attention weight를 만듭니다."""
+        return self.attn_dropout(F.softmax(scores, dim=-1))
+
+    def _context_from_values(
+        self,
+        attn_weights: torch.Tensor,
+        values: torch.Tensor,
+    ) -> torch.Tensor:
+        """attention weight로 value를 가중합하고 head를 다시 합칩니다."""
+        context = attn_weights @ values
+        return self._merge_heads(context)
+
+    def _output_projection(self, context: torch.Tensor) -> torch.Tensor:
+        """합쳐진 head 출력을 다시 d_model 공간으로 보냅니다."""
+        return self.resid_dropout(self.out_proj(context))
 
     def _split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """(B, T, C)를 (B, H, T, head_dim)으로 바꿉니다."""
