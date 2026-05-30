@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 PAD_TOKEN = "<pad>"
 UNK_TOKEN = "<unk>"
 BOS_TOKEN = "<bos>"
@@ -34,8 +33,6 @@ class BPETokenizer:
     """
 
     def __init__(self, vocab_size: int = 3000):
-        if vocab_size < BYTE_OFFSET + NUM_BYTES:
-            raise ValueError(f"vocab_size must be at least {BYTE_OFFSET + NUM_BYTES}")
         self.vocab_size = vocab_size
         self.id_to_token = {}
         self.token_to_id = {}
@@ -58,20 +55,16 @@ class BPETokenizer:
             self.token_to_id[token] = token_id
 
     def get_pad_id(self):
-        """padding 토큰 ID."""
-        return SPECIAL_IDS[PAD_TOKEN]
+        return SPECIAL_IDS[PAD_TOKEN]  # padding 토큰 ID
 
     def get_unk_id(self):
-        """unknown 토큰 ID."""
-        return SPECIAL_IDS[UNK_TOKEN]
+        return SPECIAL_IDS[UNK_TOKEN]  # unknown 토큰 ID
 
     def get_bos_id(self):
-        """문장 시작 토큰 ID."""
-        return SPECIAL_IDS[BOS_TOKEN]
+        return SPECIAL_IDS[BOS_TOKEN]  # sentence beginning 토큰 ID
 
     def get_eos_id(self):
-        """문장 끝 토큰 ID."""
-        return SPECIAL_IDS[EOS_TOKEN]
+        return SPECIAL_IDS[EOS_TOKEN]  # sentence ending 토큰 ID
 
     def train(self, corpus: str):
         """코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
@@ -81,6 +74,9 @@ class BPETokenizer:
         그 pair를 새 ID로 치환하는 일을 vocab이 찰 때까지 반복합니다.
         """
         self._init_special_tokens()
+        if self.vocab_size <= len(self.id_to_token):
+            return self
+
         sequence = [BYTE_OFFSET + byte for byte in corpus.encode("utf-8")]
 
         while len(self.id_to_token) < self.vocab_size:
@@ -109,7 +105,9 @@ class BPETokenizer:
             ],
             "merges": [list(pair) for pair in self.merges],
         }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def load(self, path: str | Path):
         """save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다."""
@@ -173,7 +171,9 @@ class BPETokenizer:
         return decoded + "".join(text_pieces)
 
     @staticmethod
-    def _replace_pair(sequence: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
+    def _replace_pair(
+        sequence: list[int], pair: tuple[int, int], new_id: int
+    ) -> list[int]:
         """sequence 안의 pair를 왼쪽부터 겹치지 않게 새 ID로 치환합니다."""
         result: list[int] = []
         i = 0
