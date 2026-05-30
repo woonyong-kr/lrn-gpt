@@ -37,13 +37,7 @@ class GELU(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """tanh 근사식으로 GELU를 계산합니다."""
-        return 0.5 * x * (
-            1.0
-            + torch.tanh(
-                torch.sqrt(torch.tensor(2.0 / torch.pi, device=x.device, dtype=x.dtype))
-                * (x + 0.044715 * torch.pow(x, 3))
-            )
-        )
+        return 0.5 * x * (1.0 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi, device=x.device, dtype=x.dtype)) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 class FeedForward(nn.Module):
@@ -82,15 +76,7 @@ class TransformerBlock(nn.Module):
     LayerNorm -> FeedForward -> residual.
     """
 
-    def __init__(
-        self,
-        d_model: int,
-        n_heads: int,
-        drop_rate: float = 0.1,
-        qkv_bias: bool = False,
-        ffn_mult: int = 4,
-        norm_first: bool = False,
-    ):
+    def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False, ffn_mult: int = 4, norm_first: bool = False):
         super().__init__()
         self.att = MultiHeadAttention(d_model, n_heads, drop_rate, qkv_bias)
         self.ffn = FeedForward(d_model, dropout=drop_rate, mult=ffn_mult)
@@ -115,11 +101,7 @@ class TransformerBlock(nn.Module):
         x = self._attention_residual_post_norm(x, causal_mask)
         return self._ffn_residual_post_norm(x)
 
-    def _attention_residual_post_norm(
-        self,
-        x: torch.Tensor,
-        causal_mask: bool,
-    ) -> torch.Tensor:
+    def _attention_residual_post_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
         """X + MultiHeadAttention(X)를 만든 뒤 첫 번째 LayerNorm을 적용합니다."""
         attention_out = self.att(x, causal_mask=causal_mask)
         return self.ln1(x + attention_out)
@@ -149,49 +131,16 @@ class GPTModel(nn.Module):
         norm_first = self.config.get("norm_first", False)
 
         self.embedding = InputEmbedding(vocab_size, emb_dim, context_length, drop_rate)
-        self.blocks = self._build_blocks(
-            n_layers=n_layers,
-            emb_dim=emb_dim,
-            n_heads=n_heads,
-            drop_rate=drop_rate,
-            qkv_bias=qkv_bias,
-            ffn_mult=ffn_mult,
-            norm_first=norm_first,
-        )
+        self.blocks = self._build_blocks(n_layers=n_layers, emb_dim=emb_dim, n_heads=n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first)
         self.final_norm = LayerNorm(emb_dim)
         self.lm_head = nn.Linear(emb_dim, vocab_size, bias=False)
         self.apply(lambda module: init_gpt_weights(module, self.config.get("init_std", 0.02)))
 
-    def _build_blocks(
-        self,
-        n_layers: int,
-        emb_dim: int,
-        n_heads: int,
-        drop_rate: float,
-        qkv_bias: bool,
-        ffn_mult: int,
-        norm_first: bool,
-    ) -> nn.ModuleList:
+    def _build_blocks(self, n_layers: int, emb_dim: int, n_heads: int, drop_rate: float, qkv_bias: bool, ffn_mult: int, norm_first: bool) -> nn.ModuleList:
         """같은 구조의 TransformerBlock을 n_layers개 쌓습니다."""
-        return nn.ModuleList(
-            [
-                TransformerBlock(
-                    emb_dim,
-                    n_heads,
-                    drop_rate=drop_rate,
-                    qkv_bias=qkv_bias,
-                    ffn_mult=ffn_mult,
-                    norm_first=norm_first,
-                )
-                for _ in range(n_layers)
-            ]
-        )
+        return nn.ModuleList([TransformerBlock(emb_dim, n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first) for _ in range(n_layers)])
 
-    def forward(
-        self,
-        idx: torch.Tensor,
-        targets: torch.Tensor | None = None,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         logits를 만들고, targets가 있으면 cross entropy loss도 함께 반환합니다.
 
@@ -234,18 +183,10 @@ class GPTModel(nn.Module):
 
     def _loss(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """각 위치의 logits와 target token ID를 cross entropy로 비교합니다."""
-        return F.cross_entropy(
-            logits.reshape(-1, logits.size(-1)),
-            targets.reshape(-1),
-        )
+        return F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
 
 
-def generate_text_simple(
-    model: GPTModel,
-    idx: torch.Tensor,
-    max_new_tokens: int,
-    context_size: int,
-) -> torch.Tensor:
+def generate_text_simple(model: GPTModel, idx: torch.Tensor, max_new_tokens: int, context_size: int) -> torch.Tensor:
     """greedy 방식으로 max_new_tokens만큼 다음 토큰을 이어 붙입니다."""
     model.eval()
     with torch.no_grad():

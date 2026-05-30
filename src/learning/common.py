@@ -247,15 +247,7 @@ class GPTDatasetV1(Dataset):
         return self.input_ids[idx], self.target_ids[idx]
 
 
-def create_simple_dataloader_v1(
-    txt: str,
-    tokenizer,
-    batch_size: int = 4,
-    max_length: int = 256,
-    stride: int = 128,
-    shuffle: bool = True,
-    drop_last: bool = True,
-) -> DataLoader:
+def create_simple_dataloader_v1(txt: str, tokenizer, batch_size: int = 4, max_length: int = 256, stride: int = 128, shuffle: bool = True, drop_last: bool = True) -> DataLoader:
     """Create a DataLoader with the toy tokenizer.
 
     DataLoader는 Dataset이 만든 샘플들을 batch로 묶어준다.
@@ -263,23 +255,10 @@ def create_simple_dataloader_v1(
     병렬 계산한다.
     """
     dataset = GPTDatasetV1(txt, tokenizer, max_length, stride)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        drop_last=drop_last,
-    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last)
 
 
-def create_dataloader_v1(
-    txt: str,
-    batch_size: int = 4,
-    max_length: int = 256,
-    stride: int = 128,
-    shuffle: bool = True,
-    drop_last: bool = True,
-    num_workers: int = 0,
-) -> DataLoader:
+def create_dataloader_v1(txt: str, batch_size: int = 4, max_length: int = 256, stride: int = 128, shuffle: bool = True, drop_last: bool = True, num_workers: int = 0) -> DataLoader:
     """Create a DataLoader with the GPT-2 BPE tokenizer from tiktoken.
 
     이 함수는 책의 `create_dataloader_v1` 흐름과 연결된다.
@@ -294,10 +273,4 @@ def create_dataloader_v1(
     """
     tokenizer = tiktoken.get_encoding("gpt2")
     dataset = GPTDatasetV1(txt, tokenizer, max_length, stride)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        drop_last=drop_last,
-        num_workers=num_workers,
-    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last, num_workers=num_workers)

@@ -31,13 +31,7 @@ def main() -> None:
     max_length = 4
     output_dim = 256
 
-    dataloader = create_dataloader_v1(
-        raw_text,
-        batch_size=batch_size,
-        max_length=max_length,
-        stride=max_length,
-        shuffle=False,
-    )
+    dataloader = create_dataloader_v1(raw_text, batch_size=batch_size, max_length=max_length, stride=max_length, shuffle=False)
     inputs, targets = next(iter(dataloader))
 
     # inputs는 아직 token ID다.

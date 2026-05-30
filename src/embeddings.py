@@ -16,13 +16,7 @@ class InputEmbedding(nn.Module):
     - dropout
     """
 
-    def __init__(
-        self,
-        vocab_size: int,
-        emb_dim: int,
-        context_length: int,
-        drop_rate: float = 0.1,
-    ):
+    def __init__(self, vocab_size: int, emb_dim: int, context_length: int, drop_rate: float = 0.1):
         super().__init__()
         self.emb_dim = emb_dim
         self.context_length = context_length
@@ -44,9 +38,7 @@ class InputEmbedding(nn.Module):
             raise ValueError("InputEmbedding input must have shape (batch_size, seq_len)")
         _, seq_len = x.shape
         if seq_len > self.context_length:
-            raise ValueError(
-                f"seq_len {seq_len} exceeds context_length {self.context_length}"
-            )
+            raise ValueError(f"seq_len {seq_len} exceeds context_length {self.context_length}")
 
         token_embeddings = self.token_embedding(x)
         positions = torch.arange(seq_len, device=x.device)

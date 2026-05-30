@@ -37,13 +37,7 @@ def main() -> None:
 
     # stride=1은 한 칸씩 밀면서 샘플을 만든다.
     # 문맥이 많이 겹치므로 촘촘히 배우지만, 같은 구간을 반복해서 보는 느낌이 생긴다.
-    dataloader = create_dataloader_v1(
-        raw_text,
-        batch_size=1,
-        max_length=4,
-        stride=1,
-        shuffle=False,
-    )
+    dataloader = create_dataloader_v1(raw_text, batch_size=1, max_length=4, stride=1, shuffle=False)
     data_iter = iter(dataloader)
 
     # 첫 번째 batch와 두 번째 batch를 비교하면 stride=1 때문에 한 칸씩 밀린 것을 볼 수 있다.
@@ -57,13 +51,7 @@ def main() -> None:
 
     # stride=max_length는 겹치지 않게 자른다.
     # 과적합을 완전히 막는 장치는 아니지만 중복 샘플은 줄어든다.
-    dataloader = create_dataloader_v1(
-        raw_text,
-        batch_size=8,
-        max_length=4,
-        stride=4,
-        shuffle=False,
-    )
+    dataloader = create_dataloader_v1(raw_text, batch_size=8, max_length=4, stride=4, shuffle=False)
     inputs, targets = next(iter(dataloader))
 
     # batch_size=8이므로 inputs와 targets는 각각 8개의 학습 샘플을 담는다.

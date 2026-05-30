@@ -115,9 +115,7 @@ class BPETokenizer:
             ],
             "merges": [list(pair) for pair in self.merges],
         }
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load(self, path: str | Path):
         """save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다."""
@@ -189,9 +187,7 @@ class BPETokenizer:
         return "".join(text_pieces)
 
     @staticmethod
-    def _replace_pair(
-        sequence: list[int], pair: tuple[int, int], new_id: int
-    ) -> list[int]:
+    def _replace_pair(sequence: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
         """sequence 안의 pair를 왼쪽부터 겹치지 않게 새 ID로 치환합니다."""
         result: list[int] = []
         i = 0
@@ -205,10 +201,7 @@ class BPETokenizer:
         return result
 
     @staticmethod
-    def _select_best_pair(
-        sequence: list[int],
-        min_frequency: int = 1,
-    ) -> tuple[int, int] | None:
+    def _select_best_pair(sequence: list[int], min_frequency: int = 1) -> tuple[int, int] | None:
         """빈도, 최초 등장 위치, token ID 순서로 병합할 pair를 선택합니다."""
         if len(sequence) < 2:
             return None
@@ -220,10 +213,7 @@ class BPETokenizer:
             counts[pair] = counts.get(pair, 0) + 1
             first_seen.setdefault(pair, idx)
 
-        best_pair = min(
-            counts,
-            key=lambda pair: (-counts[pair], first_seen[pair], pair[0], pair[1]),
-        )
+        best_pair = min(counts, key=lambda pair: (-counts[pair], first_seen[pair], pair[0], pair[1]))
         if counts[best_pair] < min_frequency:
             return None
         return best_pair

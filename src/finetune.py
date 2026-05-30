@@ -13,13 +13,7 @@ except ImportError:
     from model import GPTModel
 
 
-def make_sentiment_dataset(
-    train_tsv_path: str | Path,
-    test_tsv_path: str | Path | None = None,
-    val_ratio: float = 0.08,
-    seed: int = 42,
-    output_dir: str | Path | None = None,
-) -> tuple[list[dict], list[dict], list[dict]]:
+def make_sentiment_dataset(train_tsv_path: str | Path, test_tsv_path: str | Path | None = None, val_ratio: float = 0.08, seed: int = 42, output_dir: str | Path | None = None) -> tuple[list[dict], list[dict], list[dict]]:
     """
     TODO: NSMC TSV를 읽어 train/validation/test 감성 분류 데이터를 만듭니다.
 
@@ -32,13 +26,7 @@ def make_sentiment_dataset(
 class ReviewSentimentDataset(Dataset):
     """감성 분류용 Dataset. 리뷰 하나와 label 하나를 반환합니다."""
 
-    def __init__(
-        self,
-        data: list[dict],
-        tokenizer,
-        max_length: int = 128,
-        pad_id: int | None = None,
-    ):
+    def __init__(self, data: list[dict], tokenizer, max_length: int = 128, pad_id: int | None = None):
         self.data = data
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -59,23 +47,14 @@ class GPTForSequenceClassification(nn.Module):
     주의: LM head는 다음 토큰 예측용입니다. 감성 분류는 hidden state 위에 별도 classifier를 붙입니다.
     """
 
-    def __init__(
-        self,
-        gpt_model: GPTModel,
-        num_labels: int = 2,
-        drop_rate: float = 0.1,
-    ):
+    def __init__(self, gpt_model: GPTModel, num_labels: int = 2, drop_rate: float = 0.1):
         super().__init__()
         self.gpt = gpt_model
         self.num_labels = num_labels
         # TODO: dropout과 classifier를 정의하세요. classifier 입력 차원은 gpt_model.config["emb_dim"]입니다.
         raise NotImplementedError("GPTForSequenceClassification.__init__을 구현하세요.")
 
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         TODO: GPT hidden state에서 문장 대표 벡터를 뽑아 분류 logits를 만듭니다.
 
@@ -84,20 +63,11 @@ class GPTForSequenceClassification(nn.Module):
         raise NotImplementedError("GPTForSequenceClassification.forward를 구현하세요.")
 
 
-def train_epoch_sentiment(
-    model: GPTForSequenceClassification,
-    train_loader,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-) -> tuple[float, float]:
+def train_epoch_sentiment(model: GPTForSequenceClassification, train_loader, optimizer: torch.optim.Optimizer, device: torch.device) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 1 epoch 훈련하고 (평균 loss, accuracy)를 반환합니다."""
     raise NotImplementedError("train_epoch_sentiment를 구현하세요.")
 
 
-def evaluate_sentiment(
-    model: GPTForSequenceClassification,
-    data_loader,
-    device: torch.device,
-) -> tuple[float, float]:
+def evaluate_sentiment(model: GPTForSequenceClassification, data_loader, device: torch.device) -> tuple[float, float]:
     """TODO: 감성 분류 모델을 평가하고 (평균 loss, accuracy)를 반환합니다."""
     raise NotImplementedError("evaluate_sentiment를 구현하세요.")
