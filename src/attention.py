@@ -6,6 +6,93 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def attention_score_matrix(
+    queries: torch.Tensor,
+    keys: torch.Tensor,
+    scale: float | None = None,
+) -> torch.Tensor:
+    """Q와 K를 비교해 attention score matrix를 만듭니다."""
+    scores = queries @ keys.transpose(-2, -1)
+    if scale is None:
+        return scores
+    return scores / scale
+
+
+def apply_causal_score_mask(
+    scores: torch.Tensor,
+    seq_len: int | None = None,
+) -> torch.Tensor:
+    """미래 token 위치의 score를 -inf로 바꿉니다."""
+    seq_len = scores.size(-1) if seq_len is None else seq_len
+    mask = torch.triu(
+        torch.ones(seq_len, seq_len, dtype=torch.bool, device=scores.device),
+        diagonal=1,
+    )
+    return scores.masked_fill(mask, float("-inf"))
+
+
+def normalize_attention_scores(
+    scores: torch.Tensor,
+    dropout: nn.Module | None = None,
+) -> torch.Tensor:
+    """score row마다 softmax를 적용해 attention weight를 만듭니다."""
+    weights = F.softmax(scores, dim=-1)
+    return weights if dropout is None else dropout(weights)
+
+
+def weighted_value_context(
+    attn_weights: torch.Tensor,
+    values: torch.Tensor,
+) -> torch.Tensor:
+    """attention weight로 value를 가중합해 context vector를 만듭니다."""
+    return attn_weights @ values
+
+
+def simplified_self_attention(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Q/K/V 가중치 없이 X끼리 비교하는 간소화된 self-attention.
+
+    Returns:
+        (context, attention_weights)
+    """
+    scores = attention_score_matrix(x, x)
+    weights = normalize_attention_scores(scores)
+    return weighted_value_context(weights, x), weights
+
+
+def projected_self_attention(
+    x: torch.Tensor,
+    w_query: torch.Tensor,
+    w_key: torch.Tensor,
+    w_value: torch.Tensor,
+    causal_mask: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    X에 W_Q/W_K/W_V를 곱해 Q/K/V를 만든 뒤 self-attention을 계산합니다.
+
+    이 함수는 학습용 예제에서 "셀프 어텐션"과 "코잘 어텐션" 차이를
+    같은 연산 흐름으로 보여주기 위한 작은 wrapper입니다.
+    """
+    queries = x @ w_query
+    keys = x @ w_key
+    values = x @ w_value
+    scores = attention_score_matrix(queries, keys, scale=keys.size(-1) ** 0.5)
+    if causal_mask:
+        scores = apply_causal_score_mask(scores)
+    weights = normalize_attention_scores(scores)
+    return weighted_value_context(weights, values), weights
+
+
+def causal_self_attention(
+    x: torch.Tensor,
+    w_query: torch.Tensor,
+    w_key: torch.Tensor,
+    w_value: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """projected_self_attention에 causal mask를 켠 GPT식 self-attention."""
+    return projected_self_attention(x, w_query, w_key, w_value, causal_mask=True)
+
+
 class MultiHeadAttention(nn.Module):
     """
     GPT의 causal self-attention을 구현합니다.
@@ -56,13 +143,13 @@ class MultiHeadAttention(nn.Module):
             raise ValueError("MultiHeadAttention input must have shape (B, T, C)")
         seq_len = self._validate_embedding_dim(x)
         queries, keys, values = self._project_qkv(x)
-        scores = self._scaled_attention_scores(queries, keys)
-        if causal_mask:
-            scores = self._apply_causal_mask(scores, seq_len)
-
-        attn_weights = self._attention_weights(scores)
-        context = self._context_from_values(attn_weights, values)
-        out = self._output_projection(context)
+        out, attn_weights = self._run_multi_head_attention(
+            queries,
+            keys,
+            values,
+            seq_len=seq_len,
+            causal_mask=causal_mask,
+        )
 
         if return_attention_weights:
             return out, attn_weights
@@ -85,26 +172,38 @@ class MultiHeadAttention(nn.Module):
         values = self._split_heads(self.W_value(x))
         return queries, keys, values
 
+    def _run_multi_head_attention(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        seq_len: int,
+        causal_mask: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """score -> mask -> softmax -> context -> output projection 흐름을 실행합니다."""
+        scores = self._scaled_attention_scores(queries, keys)
+        if causal_mask:
+            scores = self._apply_causal_mask(scores, seq_len)
+
+        attn_weights = self._attention_weights(scores)
+        context = self._context_from_values(attn_weights, values)
+        return self._output_projection(context), attn_weights
+
     def _scaled_attention_scores(
         self,
         queries: torch.Tensor,
         keys: torch.Tensor,
     ) -> torch.Tensor:
         """Q와 K의 내적을 head_dim으로 스케일링합니다."""
-        scores = queries @ keys.transpose(-2, -1)
-        return scores / (self.head_dim ** 0.5)
+        return attention_score_matrix(queries, keys, scale=self.head_dim ** 0.5)
 
     def _apply_causal_mask(self, scores: torch.Tensor, seq_len: int) -> torch.Tensor:
         """미래 token 위치의 score를 -inf로 바꿉니다."""
-        mask = torch.triu(
-            torch.ones(seq_len, seq_len, dtype=torch.bool, device=scores.device),
-            diagonal=1,
-        )
-        return scores.masked_fill(mask, float("-inf"))
+        return apply_causal_score_mask(scores, seq_len)
 
     def _attention_weights(self, scores: torch.Tensor) -> torch.Tensor:
         """score row마다 softmax를 적용해 attention weight를 만듭니다."""
-        return self.attn_dropout(F.softmax(scores, dim=-1))
+        return normalize_attention_scores(scores, dropout=self.attn_dropout)
 
     def _context_from_values(
         self,
@@ -112,7 +211,7 @@ class MultiHeadAttention(nn.Module):
         values: torch.Tensor,
     ) -> torch.Tensor:
         """attention weight로 value를 가중합하고 head를 다시 합칩니다."""
-        context = attn_weights @ values
+        context = weighted_value_context(attn_weights, values)
         return self._merge_heads(context)
 
     def _output_projection(self, context: torch.Tensor) -> torch.Tensor:

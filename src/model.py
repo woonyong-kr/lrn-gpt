@@ -58,21 +58,22 @@ class FeedForward(nn.Module):
         self.activation = GELU()
         self.linear2 = nn.Linear(hidden_dim, d_model)
         self.dropout = nn.Dropout(dropout)
+        self.flow_steps = ("linear1", "activation", "linear2", "dropout")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """FeedForward 네트워크를 통과시킵니다."""
-        hidden = self._expand_features(x)
-        activated = self.activation(hidden)
-        projected = self._project_back(activated)
-        return self.dropout(projected)
+        return self._run_projection_stack(x)
 
-    def _expand_features(self, x: torch.Tensor) -> torch.Tensor:
-        """Linear1: 각 token 벡터를 더 넓은 FFN 차원으로 펼칩니다."""
-        return self.linear1(x)
+    def _run_projection_stack(self, x: torch.Tensor) -> torch.Tensor:
+        """flow_steps에 적힌 순서대로 FFN sub-layer를 실행합니다."""
+        for step_name in self.flow_steps:
+            x = self._run_step(step_name, x)
+        return x
 
-    def _project_back(self, x: torch.Tensor) -> torch.Tensor:
-        """Linear2: FFN 차원을 다시 d_model 차원으로 되돌립니다."""
-        return self.linear2(x)
+    def _run_step(self, step_name: str, x: torch.Tensor) -> torch.Tensor:
+        """step 이름으로 실제 layer를 찾아 실행합니다."""
+        layer = getattr(self, step_name)
+        return layer(x)
 
 
 class TransformerBlock(nn.Module):
@@ -209,15 +210,23 @@ class GPTModel(nn.Module):
 
     def forward_hidden(self, idx: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """LM head 직전 hidden state를 반환합니다. 분류 head 재사용용입니다."""
-        x = self.embedding(idx)
+        x = self._embed_token_ids(idx)
         x = self._apply_blocks(x, causal_mask)
-        return self.final_norm(x)
+        return self._normalize_hidden(x)
+
+    def _embed_token_ids(self, idx: torch.Tensor) -> torch.Tensor:
+        """token ID sequence를 Transformer 입력 벡터 X로 바꿉니다."""
+        return self.embedding(idx)
 
     def _apply_blocks(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
         """embedding X를 TransformerBlock 1..N에 순서대로 통과시킵니다."""
         for block in self.blocks:
             x = block(x, causal_mask=causal_mask)
         return x
+
+    def _normalize_hidden(self, hidden: torch.Tensor) -> torch.Tensor:
+        """마지막 LM head 전에 hidden state를 한 번 더 정규화합니다."""
+        return self.final_norm(hidden)
 
     def _to_logits(self, hidden: torch.Tensor) -> torch.Tensor:
         """hidden state를 vocab 전체에 대한 다음 토큰 점수로 바꿉니다."""
