@@ -9,10 +9,12 @@ try:
     from .attention import MultiHeadAttention
     from .config import init_gpt_weights, normalize_config, set_seed
     from .embeddings import InputEmbedding
+    from .guards import require
 except ImportError:
     from attention import MultiHeadAttention
     from config import init_gpt_weights, normalize_config, set_seed
     from embeddings import InputEmbedding
+    from guards import require
 
 
 class LayerNorm(nn.Module):
@@ -45,8 +47,7 @@ class FeedForward(nn.Module):
 
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
-        if mult <= 0:
-            raise ValueError("mult must be positive")
+        require(mult > 0, "mult must be positive")
         hidden_dim = mult * d_model
         self.linear1 = nn.Linear(d_model, hidden_dim)
         self.activation = GELU()

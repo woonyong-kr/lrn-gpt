@@ -5,6 +5,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+try:
+    from .guards import fail, require
+except ImportError:
+    from guards import fail, require
+
 PAD_TOKEN = "<pad>"
 UNK_TOKEN = "<unk>"
 BOS_TOKEN = "<bos>"
@@ -31,8 +36,7 @@ class BPETokenizer:
     """UTF-8 byte-level BPE tokenizer."""
 
     def __init__(self, vocab_size: int = 3000, min_frequency: int = 1):
-        if min_frequency <= 0:
-            raise ValueError("min_frequency must be positive")
+        require(min_frequency > 0, "min_frequency must be positive")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
         self.id_to_token = {}
@@ -228,7 +232,7 @@ class BPETokenizer:
             return self._expand_to_bytes(left) + self._expand_to_bytes(right)
         if isinstance(token, str):
             return list(token.encode("utf-8"))
-        raise TypeError(f"Unsupported token type: {type(token)!r}")
+        fail(f"Unsupported token type: {type(token)!r}", TypeError)
 
     @staticmethod
     def _serialize_token(token: str | bytes | tuple[int, int]) -> dict[str, Any]:
@@ -238,7 +242,7 @@ class BPETokenizer:
             return {"type": "bytes", "value": list(token)}
         if isinstance(token, tuple):
             return {"type": "pair", "value": list(token)}
-        raise TypeError(f"Unsupported token type: {type(token)!r}")
+        fail(f"Unsupported token type: {type(token)!r}", TypeError)
 
     @staticmethod
     def _deserialize_token(entry: dict[str, Any]) -> str | bytes | tuple[int, int]:
@@ -250,4 +254,4 @@ class BPETokenizer:
             return bytes(value)
         if token_type == "pair":
             return tuple(value)
-        raise ValueError(f"Unknown token type: {token_type}")
+        fail(f"Unknown token type: {token_type}")

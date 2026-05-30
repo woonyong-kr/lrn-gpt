@@ -4,6 +4,11 @@
 import torch
 import torch.nn as nn
 
+try:
+    from .guards import require
+except ImportError:
+    from guards import require
+
 
 class InputEmbedding(nn.Module):
     """
@@ -34,11 +39,9 @@ class InputEmbedding(nn.Module):
         Returns:
             (batch_size, seq_len, emb_dim)
         """
-        if x.ndim != 2:
-            raise ValueError("InputEmbedding input must have shape (batch_size, seq_len)")
+        require(x.ndim == 2, "InputEmbedding input must have shape (batch_size, seq_len)")
         _, seq_len = x.shape
-        if seq_len > self.context_length:
-            raise ValueError(f"seq_len {seq_len} exceeds context_length {self.context_length}")
+        require(seq_len <= self.context_length, f"seq_len {seq_len} exceeds context_length {self.context_length}")
 
         token_embeddings = self.token_embedding(x)
         positions = torch.arange(seq_len, device=x.device)

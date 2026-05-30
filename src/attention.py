@@ -5,6 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+try:
+    from .guards import require
+except ImportError:
+    from guards import require
+
 
 def attention_score_matrix(queries: torch.Tensor, keys: torch.Tensor, scale: float | None = None) -> torch.Tensor:
     """Q와 K를 비교해 attention score matrix를 만듭니다."""
@@ -80,8 +85,7 @@ class MultiHeadAttention(nn.Module):
 
     def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False):
         super().__init__()
-        if d_model % n_heads != 0:
-            raise ValueError("d_model must be divisible by n_heads")
+        require(d_model % n_heads == 0, "d_model must be divisible by n_heads")
         self.d_model = d_model
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
@@ -101,8 +105,7 @@ class MultiHeadAttention(nn.Module):
             causal_mask: True이면 미래 위치를 볼 수 없게 mask 처리
             return_attention_weights: True이면 attention weight도 함께 반환
         """
-        if x.ndim != 3:
-            raise ValueError("MultiHeadAttention input must have shape (B, T, C)")
+        require(x.ndim == 3, "MultiHeadAttention input must have shape (B, T, C)")
         seq_len = self._validate_embedding_dim(x)
         queries, keys, values = self._project_qkv(x)
         out, attn_weights = self._run_multi_head_attention(queries, keys, values, seq_len=seq_len, causal_mask=causal_mask)
@@ -114,8 +117,7 @@ class MultiHeadAttention(nn.Module):
     def _validate_embedding_dim(self, x: torch.Tensor) -> int:
         """입력의 마지막 차원이 모델 차원과 같은지 확인하고 seq_len을 반환합니다."""
         _, seq_len, d_model = x.shape
-        if d_model != self.d_model:
-            raise ValueError(f"Expected d_model={self.d_model}, got {d_model}")
+        require(d_model == self.d_model, f"Expected d_model={self.d_model}, got {d_model}")
         return seq_len
 
     def _project_qkv(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

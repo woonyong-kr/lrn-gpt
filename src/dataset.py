@@ -4,6 +4,11 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+try:
+    from .guards import require
+except ImportError:
+    from guards import require
+
 
 class GPTDataset(Dataset):
     """
@@ -15,13 +20,11 @@ class GPTDataset(Dataset):
     """
 
     def __init__(self, token_ids: list[int], context_length: int, stride: int | None = None):
-        if context_length <= 0:
-            raise ValueError("context_length must be positive")
+        require(context_length > 0, "context_length must be positive")
         self.token_ids = token_ids
         self.context_length = context_length
         self.stride = stride if stride is not None else context_length
-        if self.stride <= 0:
-            raise ValueError("stride must be positive")
+        require(self.stride > 0, "stride must be positive")
         available = len(token_ids) - context_length - 1
         self._length = 0 if available < 0 else available // self.stride + 1
 
@@ -37,8 +40,7 @@ class GPTDataset(Dataset):
             input_ids: (context_length,)
             target_ids: (context_length,)
         """
-        if idx < 0 or idx >= self._length:
-            raise IndexError(idx)
+        require(0 <= idx < self._length, idx, IndexError)
         start = idx * self.stride
         end = start + self.context_length
         input_ids = self.token_ids[start:end]
