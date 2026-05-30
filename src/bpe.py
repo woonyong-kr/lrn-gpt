@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-UTF-8 byte-level BPE 토크나이저.
-
-외부 tokenizer 라이브러리 없이 BPE(Byte Pair Encoding)를 직접 구현합니다.
-한국어 NSMC 리뷰를 다루므로 문자열을 글자/공백 단위로 먼저 자르지 말고,
-항상 `text.encode("utf-8")`로 byte ID 시퀀스를 만든 뒤 merge를 적용하세요.
-"""
+"""UTF-8 byte sequence에 BPE merge rule을 적용하는 교육용 tokenizer."""
 
 import json
 from pathlib import Path
@@ -16,24 +10,25 @@ UNK_TOKEN = "<unk>"
 BOS_TOKEN = "<bos>"
 EOS_TOKEN = "<eos>"
 
-# 0~3: <pad>, <unk>, <bos>, <eos> 토큰 ID
+"""
+Token ID layout:
+- 0~3: special tokens
+- 4~259: raw UTF-8 byte tokens
+- 260~: BPE merge tokens
+"""
 SPECIAL_TOKENS = [
     PAD_TOKEN,
     UNK_TOKEN,
     BOS_TOKEN,
     EOS_TOKEN,
 ]
-# 4~259: 원본 byte 0~255 토큰 ID
-# 260 이상: BPE merge로 생성한 토큰
 SPECIAL_IDS = {token: idx for idx, token in enumerate(SPECIAL_TOKENS)}
 BYTE_OFFSET = len(SPECIAL_TOKENS)
 NUM_BYTES = 256
 
 
 class BPETokenizer:
-    """
-    UTF-8 byte-level BPE 토크나이저.
-    """
+    """UTF-8 byte-level BPE tokenizer."""
 
     def __init__(self, vocab_size: int = 3000, min_frequency: int = 1):
         if min_frequency <= 0:
