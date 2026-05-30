@@ -16,7 +16,15 @@ UNK_TOKEN = "<unk>"
 BOS_TOKEN = "<bos>"
 EOS_TOKEN = "<eos>"
 
-SPECIAL_TOKENS = [PAD_TOKEN, UNK_TOKEN, BOS_TOKEN, EOS_TOKEN]
+# 0~3: <pad>, <unk>, <bos>, <eos> 토큰 ID
+SPECIAL_TOKENS = [
+    PAD_TOKEN,
+    UNK_TOKEN,
+    BOS_TOKEN,
+    EOS_TOKEN,
+]
+# 4~259: 원본 byte 0~255 토큰 ID
+# 260 이상: BPE merge로 생성한 토큰
 SPECIAL_IDS = {token: idx for idx, token in enumerate(SPECIAL_TOKENS)}
 BYTE_OFFSET = len(SPECIAL_TOKENS)
 NUM_BYTES = 256
@@ -25,15 +33,13 @@ NUM_BYTES = 256
 class BPETokenizer:
     """
     UTF-8 byte-level BPE 토크나이저.
-
-    권장 ID 배치:
-    - 0~3: <pad>, <unk>, <bos>, <eos>
-    - 4~259: 원본 byte 0~255
-    - 260 이상: BPE merge로 생성한 토큰
     """
 
-    def __init__(self, vocab_size: int = 3000):
+    def __init__(self, vocab_size: int = 3000, min_frequency: int = 1):
+        if min_frequency <= 0:
+            raise ValueError("min_frequency must be positive")
         self.vocab_size = vocab_size
+        self.min_frequency = min_frequency
         self.id_to_token = {}
         self.token_to_id = {}
         self.merges = []
@@ -55,23 +61,32 @@ class BPETokenizer:
             self.token_to_id[token] = token_id
 
     def get_pad_id(self):
-        return SPECIAL_IDS[PAD_TOKEN]  # padding 토큰 ID
+        """padding 토큰 ID."""
+        return SPECIAL_IDS[PAD_TOKEN]
 
     def get_unk_id(self):
-        return SPECIAL_IDS[UNK_TOKEN]  # unknown 토큰 ID
+        """unknown 토큰 ID."""
+        return SPECIAL_IDS[UNK_TOKEN]
 
     def get_bos_id(self):
-        return SPECIAL_IDS[BOS_TOKEN]  # sentence beginning 토큰 ID
+        """문장 시작 토큰 ID."""
+        return SPECIAL_IDS[BOS_TOKEN]
 
     def get_eos_id(self):
-        return SPECIAL_IDS[EOS_TOKEN]  # sentence ending 토큰 ID
+        """문장 끝 토큰 ID."""
+        return SPECIAL_IDS[EOS_TOKEN]
 
     def train(self, corpus: str):
         """코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
 
-        BPE 학습은 역전파가 아니라 빈도 기반 규칙 학습입니다. 현재
-        sequence에서 가장 자주 등장한 인접 pair를 새 token으로 만들고,
-        그 pair를 새 ID로 치환하는 일을 vocab이 찰 때까지 반복합니다.
+        BPE 학습은 역전파가 아니라 빈도 기반 규칙 학습입니다.
+        현재 sequence에서 가장 자주 등장한 인접 pair를 새 token으로 만들고,
+        그 pair를 새 ID로 치환하는 일을 반복합니다.
+
+        멈추는 조건:
+        - 목표 vocab_size에 도달
+        - 더 이상 pair가 없음
+        - 가장 많이 나온 pair도 min_frequency보다 적게 등장
         """
         self._init_special_tokens()
         if self.vocab_size <= len(self.id_to_token):
@@ -80,7 +95,7 @@ class BPETokenizer:
         sequence = [BYTE_OFFSET + byte for byte in corpus.encode("utf-8")]
 
         while len(self.id_to_token) < self.vocab_size:
-            pair = self._select_best_pair(sequence)
+            pair = self._select_best_pair(sequence, self.min_frequency)
             if pair is None:
                 break
             new_id = len(self.id_to_token)
@@ -154,21 +169,29 @@ class BPETokenizer:
         byte_values: list[int] = []
         text_pieces: list[str] = []
 
+        def flush_bytes() -> None:
+            if not byte_values:
+                return
+            text_pieces.append(bytes(byte_values).decode("utf-8", errors="replace"))
+            byte_values.clear()
+
         for token_id in ids:
             token = self.id_to_token.get(int(token_id))
             if token is None:
                 if not skip_special:
+                    flush_bytes()
                     text_pieces.append(UNK_TOKEN)
                 continue
             if isinstance(token, str):
                 if skip_special and token in SPECIAL_TOKENS:
                     continue
+                flush_bytes()
                 text_pieces.append(token)
                 continue
             byte_values.extend(self._expand_to_bytes(int(token_id)))
 
-        decoded = bytes(byte_values).decode("utf-8", errors="replace")
-        return decoded + "".join(text_pieces)
+        flush_bytes()
+        return "".join(text_pieces)
 
     @staticmethod
     def _replace_pair(
@@ -187,7 +210,10 @@ class BPETokenizer:
         return result
 
     @staticmethod
-    def _select_best_pair(sequence: list[int]) -> tuple[int, int] | None:
+    def _select_best_pair(
+        sequence: list[int],
+        min_frequency: int = 1,
+    ) -> tuple[int, int] | None:
         """빈도, 최초 등장 위치, token ID 순서로 병합할 pair를 선택합니다."""
         if len(sequence) < 2:
             return None
@@ -199,10 +225,13 @@ class BPETokenizer:
             counts[pair] = counts.get(pair, 0) + 1
             first_seen.setdefault(pair, idx)
 
-        return min(
+        best_pair = min(
             counts,
             key=lambda pair: (-counts[pair], first_seen[pair], pair[0], pair[1]),
         )
+        if counts[best_pair] < min_frequency:
+            return None
+        return best_pair
 
     def _expand_to_bytes(self, token_id: int) -> list[int]:
         """Merge token을 원본 byte 값 리스트로 재귀적으로 펼칩니다."""
