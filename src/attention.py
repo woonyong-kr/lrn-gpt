@@ -95,6 +95,7 @@ class MultiHeadAttention(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model)
         self.attn_dropout = nn.Dropout(drop_rate)
         self.resid_dropout = nn.Dropout(drop_rate)
+        self.register_buffer("_causal_mask", torch.empty(0, 0, dtype=torch.bool), persistent=False)
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True, return_attention_weights: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
@@ -131,11 +132,17 @@ class MultiHeadAttention(nn.Module):
         """score -> mask -> softmax -> context -> output projection 흐름을 실행합니다."""
         scores = attention_score_matrix(queries, keys, scale=self.head_dim**0.5)
         if causal_mask:
-            scores = apply_causal_score_mask(scores, seq_len)
+            scores = scores.masked_fill(self._get_causal_mask(seq_len), float("-inf"))
 
         attn_weights = normalize_attention_scores(scores, dropout=self.attn_dropout)
         context = self._merge_heads(weighted_value_context(attn_weights, values))
         return self.resid_dropout(self.out_proj(context)), attn_weights
+
+    def _get_causal_mask(self, seq_len: int) -> torch.Tensor:
+        """현재 device에서 재사용 가능한 causal mask를 반환합니다."""
+        if self._causal_mask.size(0) < seq_len or self._causal_mask.device != self.W_query.weight.device:
+            self._causal_mask = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=self.W_query.weight.device), diagonal=1)
+        return self._causal_mask[:seq_len, :seq_len]
 
     def _split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """(B, T, C)를 (B, H, T, head_dim)으로 바꿉니다."""

@@ -25,7 +25,7 @@ def calc_loss_loader(data_loader, model: GPTModel, device: torch.device, num_bat
     total_loss = 0.0
     total_batches = 0
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for batch_idx, (input_batch, target_batch) in enumerate(data_loader):
             if num_batches is not None and batch_idx >= num_batches:
                 break
@@ -66,7 +66,7 @@ def generate(model: GPTModel, idx: torch.Tensor, max_new_tokens: int, context_si
     was_training = model.training
     model.eval()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -context_size:]
             logits = model(idx_cond)

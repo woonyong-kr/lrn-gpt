@@ -74,13 +74,17 @@ class ReviewSentimentDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.pad_id = tokenizer.get_pad_id() if pad_id is None else pad_id
+        self.samples = [self._encode_sample(row) for row in data]
 
     def __len__(self) -> int:
-        return len(self.data)
+        return len(self.samples)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        """text를 encode하고 max_length까지 자르거나 padding한 뒤 label과 함께 반환합니다."""
-        row = self.data[idx]
+        """미리 tokenization한 input_ids와 label을 반환합니다."""
+        return self.samples[idx]
+
+    def _encode_sample(self, row: dict) -> tuple[torch.Tensor, int]:
+        """Dataset 생성 시 한 번만 text를 token ID tensor로 변환합니다."""
         ids = self.tokenizer.encode(row["text"], add_bos_eos=True)
         ids = ids[: self.max_length]
         ids = ids + [self.pad_id] * (self.max_length - len(ids))
@@ -158,7 +162,7 @@ def evaluate_sentiment(model: GPTForSequenceClassification, data_loader, device:
     total_correct = 0
     total_examples = 0
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for input_ids, labels in data_loader:
             input_ids = input_ids.to(device)
             labels = labels.to(device)
