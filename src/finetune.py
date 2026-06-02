@@ -98,16 +98,27 @@ class GPTForSequenceClassification(nn.Module):
         super().__init__()
         self.gpt = gpt_model
         self.num_labels = num_labels
-        # TODO: dropout과 classifier를 정의하세요. classifier 입력 차원은 gpt_model.config["emb_dim"]입니다.
-        raise NotImplementedError("GPTForSequenceClassification.__init__을 구현하세요.")
+        self.pad_id = 0
+        self.dropout = nn.Dropout(drop_rate)
+        self.classifier = nn.Linear(gpt_model.config["emb_dim"], num_labels)
 
     def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
-        TODO: GPT hidden state에서 문장 대표 벡터를 뽑아 분류 logits를 만듭니다.
+        GPT hidden state에서 문장 대표 벡터를 뽑아 분류 logits를 만듭니다.
 
         labels가 있으면 (loss, logits), 없으면 logits를 반환합니다.
         """
-        raise NotImplementedError("GPTForSequenceClassification.forward를 구현하세요.")
+        hidden = self.gpt.forward_hidden(input_ids)
+        lengths = (input_ids != self.pad_id).sum(dim=1).clamp(min=1)
+        last_token_indices = lengths - 1
+        pooled = hidden[torch.arange(hidden.size(0), device=hidden.device), last_token_indices]
+        logits = self.classifier(self.dropout(pooled))
+
+        if labels is None:
+            return logits
+
+        loss = nn.functional.cross_entropy(logits, labels)
+        return loss, logits
 
 
 def train_epoch_sentiment(model: GPTForSequenceClassification, train_loader, optimizer: torch.optim.Optimizer, device: torch.device) -> tuple[float, float]:
