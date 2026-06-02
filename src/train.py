@@ -101,8 +101,42 @@ def generate_and_print_sample(model: GPTModel, tokenizer, device: torch.device, 
 
 
 def train_model(model: GPTModel, train_loader, val_loader, optimizer: torch.optim.Optimizer, device: torch.device, num_epochs: int, eval_freq: int, eval_iter: int, start_context: str, tokenizer, ckpt_freq: int | None = None, start_epoch: int = 0, global_step: int = 0) -> list[float]:
-    """TODO: 사전 학습 루프를 구현하고 epoch별 train loss 리스트를 반환합니다."""
-    raise NotImplementedError("train_model을 구현하세요.")
+    """사전 학습 루프를 실행하고 epoch별 train loss 리스트를 반환합니다."""
+    model.to(device)
+    train_losses = []
+
+    for epoch in range(start_epoch, start_epoch + num_epochs):
+        model.train()
+        epoch_loss = 0.0
+        batch_count = 0
+
+        for input_batch, target_batch in train_loader:
+            optimizer.zero_grad(set_to_none=True)
+            loss = calc_loss_batch(input_batch, target_batch, model, device)
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+            batch_count += 1
+            global_step += 1
+
+            if eval_freq > 0 and global_step % eval_freq == 0:
+                train_loss = calc_loss_loader(train_loader, model, device, num_batches=eval_iter)
+                val_loss = calc_loss_loader(val_loader, model, device, num_batches=eval_iter) if val_loader is not None else None
+                if val_loss is None:
+                    print(f"step {global_step}: train loss {train_loss:.4f}")
+                else:
+                    print(f"step {global_step}: train loss {train_loss:.4f}, val loss {val_loss:.4f}")
+
+            if ckpt_freq is not None and ckpt_freq > 0 and global_step % ckpt_freq == 0:
+                save_checkpoint(model, optimizer, epoch=epoch, global_step=global_step, path=f"checkpoint_step_{global_step}.pt")
+
+        train_losses.append(0.0 if batch_count == 0 else epoch_loss / batch_count)
+
+    if tokenizer is not None and start_context:
+        generate_and_print_sample(model, tokenizer, device, start_context=start_context)
+
+    return train_losses
 
 
 def plot_losses(train_losses: list[float], val_losses: list[float] | None = None) -> None:
