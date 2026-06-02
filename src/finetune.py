@@ -122,10 +122,55 @@ class GPTForSequenceClassification(nn.Module):
 
 
 def train_epoch_sentiment(model: GPTForSequenceClassification, train_loader, optimizer: torch.optim.Optimizer, device: torch.device) -> tuple[float, float]:
-    """TODO: 감성 분류 모델을 1 epoch 훈련하고 (평균 loss, accuracy)를 반환합니다."""
-    raise NotImplementedError("train_epoch_sentiment를 구현하세요.")
+    """감성 분류 모델을 1 epoch 훈련하고 (평균 loss, accuracy)를 반환합니다."""
+    model.to(device)
+    model.train()
+    total_loss = 0.0
+    total_correct = 0
+    total_examples = 0
+
+    for input_ids, labels in train_loader:
+        input_ids = input_ids.to(device)
+        labels = labels.to(device)
+        optimizer.zero_grad(set_to_none=True)
+
+        loss, logits = model(input_ids, labels=labels)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        batch_size = labels.size(0)
+        total_loss += loss.item() * batch_size
+        total_correct += (logits.argmax(dim=-1) == labels).sum().item()
+        total_examples += batch_size
+
+    if total_examples == 0:
+        return 0.0, 0.0
+    return total_loss / total_examples, total_correct / total_examples
 
 
 def evaluate_sentiment(model: GPTForSequenceClassification, data_loader, device: torch.device) -> tuple[float, float]:
-    """TODO: 감성 분류 모델을 평가하고 (평균 loss, accuracy)를 반환합니다."""
-    raise NotImplementedError("evaluate_sentiment를 구현하세요.")
+    """감성 분류 모델을 평가하고 (평균 loss, accuracy)를 반환합니다."""
+    was_training = model.training
+    model.to(device)
+    model.eval()
+    total_loss = 0.0
+    total_correct = 0
+    total_examples = 0
+
+    with torch.no_grad():
+        for input_ids, labels in data_loader:
+            input_ids = input_ids.to(device)
+            labels = labels.to(device)
+            loss, logits = model(input_ids, labels=labels)
+            batch_size = labels.size(0)
+            total_loss += loss.item() * batch_size
+            total_correct += (logits.argmax(dim=-1) == labels).sum().item()
+            total_examples += batch_size
+
+    if was_training:
+        model.train()
+
+    if total_examples == 0:
+        return 0.0, 0.0
+    return total_loss / total_examples, total_correct / total_examples
