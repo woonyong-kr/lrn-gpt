@@ -135,14 +135,10 @@ class GPTModel(nn.Module):
         norm_first = self.config.get("norm_first", False)
 
         self.embedding = InputEmbedding(vocab_size, emb_dim, context_length, drop_rate)
-        self.blocks = self._build_blocks(n_layers=n_layers, emb_dim=emb_dim, n_heads=n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first)
+        self.blocks = nn.ModuleList([TransformerBlock(emb_dim, n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first) for _ in range(n_layers)])
         self.final_norm = LayerNorm(emb_dim)
         self.lm_head = nn.Linear(emb_dim, vocab_size, bias=False)
         self.apply(lambda module: init_gpt_weights(module, self.config.get("init_std", 0.02)))
-
-    def _build_blocks(self, n_layers: int, emb_dim: int, n_heads: int, drop_rate: float, qkv_bias: bool, ffn_mult: int, norm_first: bool) -> nn.ModuleList:
-        """같은 구조의 TransformerBlock을 n_layers개 쌓습니다."""
-        return nn.ModuleList([TransformerBlock(emb_dim, n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first) for _ in range(n_layers)])
 
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
@@ -153,41 +149,20 @@ class GPTModel(nn.Module):
             targets가 있으면 (loss, logits)
         """
         hidden = self.forward_hidden(idx)
-        logits = self._to_logits(hidden)
+        logits = self.lm_head(hidden)
 
         if targets is None:
             return logits
 
-        loss = self._loss(logits, targets)
+        loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
         return loss, logits
 
     def forward_hidden(self, idx: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """LM head 직전 hidden state를 반환합니다. 분류 head 재사용용입니다."""
-        x = self._embed_token_ids(idx)
-        x = self._apply_blocks(x, causal_mask)
-        return self._normalize_hidden(x)
-
-    def _embed_token_ids(self, idx: torch.Tensor) -> torch.Tensor:
-        """token ID sequence를 Transformer 입력 벡터 X로 바꿉니다."""
-        return self.embedding(idx)
-
-    def _apply_blocks(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
-        """embedding X를 TransformerBlock 1..N에 순서대로 통과시킵니다."""
+        x = self.embedding(idx)
         for block in self.blocks:
             x = block(x, causal_mask=causal_mask)
-        return x
-
-    def _normalize_hidden(self, hidden: torch.Tensor) -> torch.Tensor:
-        """마지막 LM head 전에 hidden state를 한 번 더 정규화합니다."""
-        return self.final_norm(hidden)
-
-    def _to_logits(self, hidden: torch.Tensor) -> torch.Tensor:
-        """hidden state를 vocab 전체에 대한 다음 토큰 점수로 바꿉니다."""
-        return self.lm_head(hidden)
-
-    def _loss(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        """각 위치의 logits와 target token ID를 cross entropy로 비교합니다."""
-        return F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
+        return self.final_norm(x)
 
 
 def generate_text_simple(model: GPTModel, idx: torch.Tensor, max_new_tokens: int, context_size: int) -> torch.Tensor:
