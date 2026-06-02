@@ -23,11 +23,12 @@ position embedding은 같은 token이라도 몇 번째 자리인지 알려준다
 | 4 | `04_dataset_and_dataloader.py` | `input=[현재 token들]`, `target=[다음 token들]` 구조를 만든다. target은 다음 token ID다. |
 | 5 | `05_token_embedding.py` | token ID가 embedding table의 한 행, 즉 vector로 바뀌는 과정을 본다. |
 | 6 | `06_token_and_position_embedding.py` | token vector에 position vector를 더해 Transformer 입력을 만든다. |
+| 7 | `07_self_attention_random_weights.py` | 랜덤 `W_Q`, `W_K`, `W_V`로 attention score, weight, context vector를 직접 계산한다. |
 
 개별 파일도 직접 실행할 수 있다.
 
 ```bash
-python src/learning/06_token_and_position_embedding.py
+python src/learning/07_self_attention_random_weights.py
 ```
 
 전체 흐름을 한 번에 다시 보고 싶으면 shell loop로 순서대로 실행한다.

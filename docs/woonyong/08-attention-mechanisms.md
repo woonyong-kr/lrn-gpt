@@ -135,6 +135,284 @@ Attention은 한 위치의 token vector를 새로 만들 때, 문장 안의 다�
 
 즉 attention은 "어디를 볼까"와 "얼마나 섞을까"를 계산하는 장치다.
 
+### `context_vec_2` 예제는 어떤 단계인가
+
+책의 다음 코드는 attention 전체가 아니라, 이미 계산된 attention weight를 사용해서 두 번째 token의 문맥 벡터를 만드는 마지막 단계다.
+
+```python
+query = inputs[1]
+context_vec_2 = torch.zeros(query.shape)
+
+for i, x_i in enumerate(inputs):
+    context_vec_2 += attn_weights_2[i] * x_i
+```
+
+여기서 `query = inputs[1]`은 두 번째 token을 기준으로 보겠다는 뜻이다. 책 그림에서는 `x^(2)`, 예제 문장에서는 `"journey"` 위치에 해당한다.
+
+```text
+inputs[0] = x^(1) = "your"의 벡터
+inputs[1] = x^(2) = "journey"의 벡터
+inputs[2] = x^(3) = "starts"의 벡터
+...
+```
+
+`attn_weights_2[i]`는 두 번째 token이 i번째 token을 얼마나 참고할지 나타내는 비율이다.
+
+```text
+attn_weights_2[0] = alpha_21
+attn_weights_2[1] = alpha_22
+attn_weights_2[2] = alpha_23
+...
+```
+
+그래서 반복문은 다음 수식을 코드로 쓴 것이다.
+
+```text
+z^(2)
+= alpha_21 * x^(1)
+ + alpha_22 * x^(2)
+ + alpha_23 * x^(3)
+ + ...
+ + alpha_2T * x^(T)
+```
+
+작은 숫자로 보면 더 직접적이다.
+
+```text
+x^(1) = [1, 0]
+x^(2) = [0, 1]
+x^(3) = [1, 1]
+
+attn_weights_2 = [0.2, 0.5, 0.3]
+```
+
+그러면 `context_vec_2`는 처음에 0벡터로 시작한다.
+
+```text
+context_vec_2 = [0, 0]
+```
+
+반복문 1회차:
+
+```text
+context_vec_2 += 0.2 * [1, 0]
+context_vec_2  = [0.2, 0.0]
+```
+
+반복문 2회차:
+
+```text
+context_vec_2 += 0.5 * [0, 1]
+context_vec_2  = [0.2, 0.5]
+```
+
+반복문 3회차:
+
+```text
+context_vec_2 += 0.3 * [1, 1]
+context_vec_2  = [0.5, 0.8]
+```
+
+최종 결과는 다음이다.
+
+```text
+z^(2) = context_vec_2 = [0.5, 0.8]
+```
+
+이 값은 두 번째 token 하나의 새 벡터다. 다만 원래 `x^(2)`만 복사한 것이 아니라, 모든 token 벡터를 attention weight만큼 섞어서 만든 새 표현이다.
+
+```text
+원래 두 번째 token:
+x^(2)
+
+attention 후 두 번째 token:
+z^(2) = 문장 전체를 참고한 x^(2)의 새 표현
+```
+
+그래서 이 코드를 어텐션 연산이라고 부르는 이유는 다음과 같다.
+
+```text
+attention score 계산
+  -> softmax로 attention weight 계산
+  -> attention weight로 모든 token vector를 가중합
+  -> context vector 생성
+```
+
+질문에 나온 코드는 이 중 마지막 단계다.
+
+### 모든 token에 대해 한 번에 계산하기
+
+앞의 `context_vec_2` 예제는 두 번째 token 하나만 계산했다. 그런데 self-attention은 실제로는 모든 token 위치에 대해 같은 일을 한다.
+
+```text
+x^(1) -> z^(1)
+x^(2) -> z^(2)
+x^(3) -> z^(3)
+...
+x^(T) -> z^(T)
+```
+
+즉 두 번째 token의 context vector만 만드는 것이 아니라, 모든 token의 새 context vector를 만든다.
+
+질문에 나온 코드를 올바른 형태로 정리하면 다음과 같다.
+
+```python
+attn_scores = torch.empty(6, 6)
+
+for i, x_i in enumerate(inputs):
+    for j, x_j in enumerate(inputs):
+        attn_scores[i, j] = torch.dot(x_i, x_j)
+
+attn_weights = torch.softmax(attn_scores, dim=-1)
+row_2_sum = attn_weights[1].sum()
+all_context_vecs = attn_weights @ inputs
+```
+
+여기서 `inputs`가 6개 token의 벡터라고 하자.
+
+```text
+inputs shape = (6, 3)
+```
+
+이 말은 다음 뜻이다.
+
+```text
+token 개수 = 6개
+각 token vector 차원 = 3차원
+```
+
+`attn_scores`는 `(6, 6)`이다.
+
+```text
+attn_scores shape = (6, 6)
+```
+
+왜 `(6, 6)`이냐면, 6개 token 각각이 6개 token 전부와 한 번씩 비교되기 때문이다.
+
+```text
+attn_scores[i, j] = dot(x_i, x_j)
+```
+
+행 `i`는 i번째 token을 기준으로 본다는 뜻이다.
+
+```text
+attn_scores[0, :] = 0번째 token이 모든 token을 본 점수
+attn_scores[1, :] = 1번째 token이 모든 token을 본 점수
+attn_scores[2, :] = 2번째 token이 모든 token을 본 점수
+...
+```
+
+열 `j`는 참고 대상 token이다.
+
+```text
+attn_scores[i, 0] = i번째 token이 0번째 token을 보는 점수
+attn_scores[i, 1] = i번째 token이 1번째 token을 보는 점수
+attn_scores[i, 2] = i번째 token이 2번째 token을 보는 점수
+...
+```
+
+그 다음 softmax를 적용한다.
+
+```python
+attn_weights = torch.softmax(attn_scores, dim=-1)
+```
+
+`dim=-1`은 마지막 차원에 softmax를 적용한다는 뜻이다. `attn_scores`가 `(6, 6)`이므로 마지막 차원은 각 행의 열 방향이다. 그래서 각 행마다 따로 softmax가 적용된다.
+
+```text
+attn_weights[0, :]의 합 = 1
+attn_weights[1, :]의 합 = 1
+attn_weights[2, :]의 합 = 1
+...
+```
+
+`row_2_sum`은 책에서 두 번째 token `x^(2)`의 attention weight 합을 확인하는 코드에 가깝다. Python index로는 두 번째 token이 `1`번 row다.
+
+```python
+row_2_sum = attn_weights[1].sum()
+```
+
+이 값이 1이 되는 이유는 softmax가 한 token이 다른 token들을 참고하는 비율을 합 1로 만들기 때문이다.
+
+마지막 줄이 간소화된 self-attention의 최종 단계다.
+
+```python
+all_context_vecs = attn_weights @ inputs
+```
+
+shape로 보면 다음과 같다.
+
+```text
+attn_weights shape = (6, 6)
+inputs shape       = (6, 3)
+
+all_context_vecs shape = (6, 3)
+```
+
+행렬곱은 다음 의미다.
+
+```text
+all_context_vecs[0] = z^(1)
+all_context_vecs[1] = z^(2)
+all_context_vecs[2] = z^(3)
+...
+```
+
+즉 `all_context_vecs`는 모든 token의 새 context vector를 모은 결과다.
+
+```text
+all_context_vecs =
+[
+  z^(1),
+  z^(2),
+  z^(3),
+  z^(4),
+  z^(5),
+  z^(6),
+]
+```
+
+`all_context_vecs[1]`은 앞에서 for문으로 직접 만들었던 `context_vec_2`와 같은 값이다.
+
+```text
+context_vec_2
+= attn_weights[1, 0] * x^(1)
+ + attn_weights[1, 1] * x^(2)
+ + attn_weights[1, 2] * x^(3)
+ + ...
+ + attn_weights[1, 5] * x^(6)
+
+all_context_vecs[1] = context_vec_2
+```
+
+정리하면 간소화된 self-attention은 여기서 끝난다.
+
+```text
+1. 입력 벡터 X를 준비한다.
+2. 모든 token pair의 dot product를 계산한다.
+   attn_scores = X @ X.T
+3. 각 row에 softmax를 적용한다.
+   attn_weights = softmax(attn_scores, dim=-1)
+4. attention weight로 입력 벡터들을 섞는다.
+   all_context_vecs = attn_weights @ X
+```
+
+수식으로 쓰면 다음이다.
+
+```text
+Z = softmax(X X^T) X
+```
+
+이것이 간소화된 self-attention이다. 아직 `W_Q`, `W_K`, `W_V`가 없기 때문에 학습 가능한 attention projection은 아니다. 실제 Transformer에서는 다음처럼 확장된다.
+
+```text
+Q = X W_Q
+K = X W_K
+V = X W_V
+
+Z = softmax(Q K^T / sqrt(d_k)) V
+```
+
 ## 공통 입력
 
 앞 단계에서 이미 input embedding을 만들었다고 하자.
@@ -257,6 +535,63 @@ scores = Q K^T / sqrt(d_k)
 attention_weights = softmax(scores)
 context = attention_weights V
 ```
+
+여기서 `context = attention_weights V`는 `V`를 수정한다는 뜻이 아니다.
+attention weight라는 비율로 여러 value vector를 섞어서 **현재 token의 새 context vector**를 만든다는 뜻이다.
+
+예를 들어 현재 token이 1번이고, 참조 후보가 6개라면 attention weight는 6개짜리 벡터다.
+
+```text
+attention_weights shape = (6,)
+values shape            = (6, 2)
+
+attention_weights @ values
+= (6,) @ (6, 2)
+= (2,)
+```
+
+`(6,)`은 다음처럼 6개 후보를 얼마나 참고할지 나타낸다.
+
+```text
+attention_weights =
+[0.17, 0.16, 0.16, 0.16, 0.16, 0.19]
+```
+
+`values`는 각 후보 token이 실제로 제공할 내용 벡터다.
+
+```text
+values =
+[
+  v0,
+  v1,
+  v2,
+  v3,
+  v4,
+  v5,
+]
+
+각 v_i shape = (2,)
+```
+
+행렬곱 `attention_weights @ values`는 아래 가중합을 한 번에 계산한다.
+
+```text
+context
+= 0.17 * v0
+ + 0.16 * v1
+ + 0.16 * v2
+ + 0.16 * v3
+ + 0.16 * v4
+ + 0.19 * v5
+```
+
+그래서 결과는 후보 6개가 아니라, 현재 token 하나에 대한 새 벡터 하나다.
+
+```text
+context shape = (2,)
+```
+
+이 context vector는 최종 답이 아니다. Transformer block 안에서 attention이 만든 중간 표현이다. 실제 GPT에서는 이후 output projection, residual connection, layer norm, feed-forward network를 지나 다음 block으로 넘어가고, 마지막에는 vocab logits로 변환되어 다음 token 예측에 사용된다.
 
 최종 수식은 다음이다.
 

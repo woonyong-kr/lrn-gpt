@@ -11,6 +11,10 @@ import torch
 import torch.nn as nn
 
 
+DEFAULT_DEBUG = False
+DEFAULT_SEED = 123
+
+
 @dataclass(slots=True)
 class GPTConfig:
     """작은 GPT 모델의 폭, 깊이, 초기화 방식을 한곳에서 관리합니다."""
@@ -25,7 +29,8 @@ class GPTConfig:
     ffn_mult: int = 4
     norm_first: bool = False
     init_std: float = 0.02
-    seed: int | None = None
+    debug: bool = DEFAULT_DEBUG
+    seed: int = DEFAULT_SEED
 
     def to_dict(self) -> dict:
         """기존 dict 기반 코드와 함께 쓰기 위한 변환 함수."""
@@ -50,6 +55,13 @@ def set_seed(seed: int | None, deterministic: bool = False) -> None:
         torch.cuda.manual_seed_all(seed)
     if deterministic:
         torch.use_deterministic_algorithms(True)
+
+
+def set_debug_seed(debug: bool = DEFAULT_DEBUG, seed: int = DEFAULT_SEED, deterministic: bool = False) -> None:
+    """debug가 켜져 있을 때만 전역 랜덤 seed를 고정합니다."""
+    if not debug:
+        return
+    set_seed(seed, deterministic=deterministic)
 
 
 def init_gpt_weights(module: nn.Module, init_std: float = 0.02) -> None:

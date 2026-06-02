@@ -7,12 +7,12 @@ import torch.nn.functional as F
 
 try:
     from .attention import MultiHeadAttention
-    from .config import init_gpt_weights, normalize_config, set_seed
+    from .config import DEFAULT_DEBUG, DEFAULT_SEED, init_gpt_weights, normalize_config, set_debug_seed
     from .embeddings import InputEmbedding
     from .guards import require
 except ImportError:
     from attention import MultiHeadAttention
-    from config import init_gpt_weights, normalize_config, set_seed
+    from config import DEFAULT_DEBUG, DEFAULT_SEED, init_gpt_weights, normalize_config, set_debug_seed
     from embeddings import InputEmbedding
     from guards import require
 
@@ -119,7 +119,10 @@ class GPTModel(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = normalize_config(config)
-        set_seed(self.config.get("seed"))
+        set_debug_seed(
+            debug=self.config.get("debug", DEFAULT_DEBUG),
+            seed=self.config.get("seed", DEFAULT_SEED),
+        )
 
         vocab_size = self.config["vocab_size"]
         context_length = self.config["context_length"]

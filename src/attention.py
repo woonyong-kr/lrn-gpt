@@ -129,34 +129,13 @@ class MultiHeadAttention(nn.Module):
 
     def _run_multi_head_attention(self, queries: torch.Tensor, keys: torch.Tensor, values: torch.Tensor, seq_len: int, causal_mask: bool) -> tuple[torch.Tensor, torch.Tensor]:
         """score -> mask -> softmax -> context -> output projection 흐름을 실행합니다."""
-        scores = self._scaled_attention_scores(queries, keys)
+        scores = attention_score_matrix(queries, keys, scale=self.head_dim**0.5)
         if causal_mask:
-            scores = self._apply_causal_mask(scores, seq_len)
+            scores = apply_causal_score_mask(scores, seq_len)
 
-        attn_weights = self._attention_weights(scores)
-        context = self._context_from_values(attn_weights, values)
-        return self._output_projection(context), attn_weights
-
-    def _scaled_attention_scores(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
-        """Q와 K의 내적을 head_dim으로 스케일링합니다."""
-        return attention_score_matrix(queries, keys, scale=self.head_dim ** 0.5)
-
-    def _apply_causal_mask(self, scores: torch.Tensor, seq_len: int) -> torch.Tensor:
-        """미래 token 위치의 score를 -inf로 바꿉니다."""
-        return apply_causal_score_mask(scores, seq_len)
-
-    def _attention_weights(self, scores: torch.Tensor) -> torch.Tensor:
-        """score row마다 softmax를 적용해 attention weight를 만듭니다."""
-        return normalize_attention_scores(scores, dropout=self.attn_dropout)
-
-    def _context_from_values(self, attn_weights: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
-        """attention weight로 value를 가중합하고 head를 다시 합칩니다."""
-        context = weighted_value_context(attn_weights, values)
-        return self._merge_heads(context)
-
-    def _output_projection(self, context: torch.Tensor) -> torch.Tensor:
-        """합쳐진 head 출력을 다시 d_model 공간으로 보냅니다."""
-        return self.resid_dropout(self.out_proj(context))
+        attn_weights = normalize_attention_scores(scores, dropout=self.attn_dropout)
+        context = self._merge_heads(weighted_value_context(attn_weights, values))
+        return self.resid_dropout(self.out_proj(context)), attn_weights
 
     def _split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """(B, T, C)를 (B, H, T, head_dim)으로 바꿉니다."""

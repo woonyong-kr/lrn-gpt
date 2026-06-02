@@ -39,13 +39,9 @@ class BPETokenizer:
         require(min_frequency > 0, "min_frequency must be positive")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self._reset_vocab()
+        self._init_special_tokens()
 
     def _init_special_tokens(self):
-        """기존 테스트 호환용 wrapper."""
-        self._reset_vocab()
-
-    def _reset_vocab(self):
         """기본 special token과 UTF-8 byte token으로 vocabulary를 리셋합니다."""
         self.id_to_token = {}
         self.token_to_id = {}
@@ -88,7 +84,7 @@ class BPETokenizer:
         - 더 이상 pair가 없음
         - 가장 많이 나온 pair도 min_frequency보다 적게 등장
         """
-        self._reset_vocab()
+        self._init_special_tokens()
         if self.vocab_size <= len(self.id_to_token):
             return self
 
@@ -108,17 +104,25 @@ class BPETokenizer:
 
     def save(self, path: str | Path):
         """Vocabulary와 merge rule을 JSON 파일로 저장합니다.
-
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         """
         path = Path(path)
+
+        id_to_token_entries = []
+        for token_id, token in sorted(self.id_to_token.items()):
+            serialized_token = self._serialize_token(token)
+            entry = {"id": token_id}
+            entry.update(serialized_token)
+            id_to_token_entries.append(entry)
+
+        merge_entries = []
+        for pair in self.merges:
+            merge_entries.append(list(pair))
+
         payload = {
             "vocab_size": self.vocab_size,
-            "id_to_token": [
-                {"id": token_id, **self._serialize_token(token)}
-                for token_id, token in sorted(self.id_to_token.items())
-            ],
-            "merges": [list(pair) for pair in self.merges],
+            "id_to_token": id_to_token_entries,
+            "merges": merge_entries,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
