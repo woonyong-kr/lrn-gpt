@@ -39,9 +39,13 @@ class BPETokenizer:
         require(min_frequency > 0, "min_frequency must be positive")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self._init_special_tokens()
+        self._reset_vocab()
 
     def _init_special_tokens(self):
+        """기존 테스트 호환용 wrapper."""
+        self._reset_vocab()
+
+    def _reset_vocab(self):
         """기본 special token과 UTF-8 byte token으로 vocabulary를 리셋합니다."""
         self.id_to_token = {}
         self.token_to_id = {}
@@ -84,7 +88,7 @@ class BPETokenizer:
         - 더 이상 pair가 없음
         - 가장 많이 나온 pair도 min_frequency보다 적게 등장
         """
-        self._init_special_tokens()
+        self._reset_vocab()
         if self.vocab_size <= len(self.id_to_token):
             return self
 

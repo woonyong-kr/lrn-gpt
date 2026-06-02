@@ -53,22 +53,13 @@ class FeedForward(nn.Module):
         self.activation = GELU()
         self.linear2 = nn.Linear(hidden_dim, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.flow_steps = ("linear1", "activation", "linear2", "dropout")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """FeedForward 네트워크를 통과시킵니다."""
-        return self._run_projection_stack(x)
-
-    def _run_projection_stack(self, x: torch.Tensor) -> torch.Tensor:
-        """flow_steps에 적힌 순서대로 FFN sub-layer를 실행합니다."""
-        for step_name in self.flow_steps:
-            x = self._run_step(step_name, x)
-        return x
-
-    def _run_step(self, step_name: str, x: torch.Tensor) -> torch.Tensor:
-        """step 이름으로 실제 layer를 찾아 실행합니다."""
-        layer = getattr(self, step_name)
-        return layer(x)
+        x = self.linear1(x)
+        x = self.activation(x)
+        x = self.linear2(x)
+        return self.dropout(x)
 
 
 class TransformerBlock(nn.Module):
@@ -88,27 +79,11 @@ class TransformerBlock(nn.Module):
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """attention과 ffn을 residual connection으로 연결합니다."""
         if self.norm_first:
-            return self._forward_pre_norm(x, causal_mask)
+            x = x + self.att(self.ln1(x), causal_mask=causal_mask)
+            return x + self.ffn(self.ln2(x))
 
-        return self._forward_post_norm(x, causal_mask)
-
-    def _forward_pre_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
-        """Pre-LN block: LayerNorm을 각 sub-layer 앞에서 적용합니다."""
-        x = x + self.att(self.ln1(x), causal_mask=causal_mask)
-        return x + self.ffn(self.ln2(x))
-
-    def _forward_post_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
-        """Post-LN block: residual add 뒤에 LayerNorm을 적용합니다."""
-        x = self._attention_residual_post_norm(x, causal_mask)
-        return self._ffn_residual_post_norm(x)
-
-    def _attention_residual_post_norm(self, x: torch.Tensor, causal_mask: bool) -> torch.Tensor:
-        """X + MultiHeadAttention(X)를 만든 뒤 첫 번째 LayerNorm을 적용합니다."""
         attention_out = self.att(x, causal_mask=causal_mask)
-        return self.ln1(x + attention_out)
-
-    def _ffn_residual_post_norm(self, x: torch.Tensor) -> torch.Tensor:
-        """LayerNorm 결과 + FFN 결과를 만든 뒤 두 번째 LayerNorm을 적용합니다."""
+        x = self.ln1(x + attention_out)
         ffn_out = self.ffn(x)
         return self.ln2(x + ffn_out)
 
@@ -119,10 +94,7 @@ class GPTModel(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = normalize_config(config)
-        set_debug_seed(
-            debug=self.config.get("debug", DEFAULT_DEBUG),
-            seed=self.config.get("seed", DEFAULT_SEED),
-        )
+        set_debug_seed(debug=self.config.get("debug", DEFAULT_DEBUG), seed=self.config.get("seed", DEFAULT_SEED))
 
         vocab_size = self.config["vocab_size"]
         context_length = self.config["context_length"]
