@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """NSMC 감성 분류 미세 조정 과제 템플릿."""
 
+import csv
+import json
+import random
 from pathlib import Path
 
 import torch
@@ -9,18 +12,58 @@ from torch.utils.data import Dataset
 
 try:
     from .model import GPTModel
+    from .guards import require
 except ImportError:
     from model import GPTModel
+    from guards import require
 
 
 def make_sentiment_dataset(train_tsv_path: str | Path, test_tsv_path: str | Path | None = None, val_ratio: float = 0.08, seed: int = 42, output_dir: str | Path | None = None) -> tuple[list[dict], list[dict], list[dict]]:
     """
-    TODO: NSMC TSV를 읽어 train/validation/test 감성 분류 데이터를 만듭니다.
+    NSMC TSV를 읽어 train/validation/test 감성 분류 데이터를 만듭니다.
 
     반환 형식:
         [{"text": "리뷰", "label": 0 또는 1}, ...]
     """
-    raise NotImplementedError("make_sentiment_dataset을 구현하세요.")
+    require(0.0 <= val_ratio < 1.0, "val_ratio must be in [0, 1)")
+    train_data = _read_nsmc_tsv(train_tsv_path)
+    rng = random.Random(seed)
+    rng.shuffle(train_data)
+
+    val_size = int(len(train_data) * val_ratio)
+    val_data = train_data[:val_size]
+    train_data = train_data[val_size:]
+    test_data = [] if test_tsv_path is None else _read_nsmc_tsv(test_tsv_path)
+
+    if output_dir is not None:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        _write_jsonl(output_path / "train.jsonl", train_data)
+        _write_jsonl(output_path / "validation.jsonl", val_data)
+        _write_jsonl(output_path / "test.jsonl", test_data)
+
+    return train_data, val_data, test_data
+
+
+def _read_nsmc_tsv(path: str | Path) -> list[dict]:
+    """NSMC TSV에서 document/label만 뽑고 빈 리뷰를 제거합니다."""
+    rows: list[dict] = []
+    with Path(path).open("r", encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file, delimiter="\t")
+        for row in reader:
+            text = (row.get("document") or "").strip()
+            label = (row.get("label") or "").strip()
+            if not text or label not in {"0", "1"}:
+                continue
+            rows.append({"text": text, "label": int(label)})
+    return rows
+
+
+def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    """학습/검증/테스트 split을 JSONL로 저장합니다."""
+    with path.open("w", encoding="utf-8") as file:
+        for row in rows:
+            file.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 class ReviewSentimentDataset(Dataset):
@@ -36,8 +79,12 @@ class ReviewSentimentDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        """TODO: text를 encode하고 max_length까지 자르거나 padding한 뒤 label과 함께 반환합니다."""
-        raise NotImplementedError("ReviewSentimentDataset.__getitem__을 구현하세요.")
+        """text를 encode하고 max_length까지 자르거나 padding한 뒤 label과 함께 반환합니다."""
+        row = self.data[idx]
+        ids = self.tokenizer.encode(row["text"], add_bos_eos=True)
+        ids = ids[: self.max_length]
+        ids = ids + [self.pad_id] * (self.max_length - len(ids))
+        return torch.tensor(ids, dtype=torch.long), int(row["label"])
 
 
 class GPTForSequenceClassification(nn.Module):
