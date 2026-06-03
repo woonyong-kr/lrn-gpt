@@ -59,6 +59,6 @@
   "runs_dir": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/local/nsmc_bestfit/runs",
   "selection_rule": "lower best_val_bits_per_char, then lower rebound/gap/compute, with small throughput bonus",
   "train_text": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/data/nsmc_lm_train.txt",
-  "updated_at": "2026-06-03T19:30:04.322778+00:00",
+  "updated_at": "2026-06-03T19:59:09.825788+00:00",
   "val_text": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/data/nsmc_lm_val.txt"
 }

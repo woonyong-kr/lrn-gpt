@@ -1,0 +1,14 @@
+{
+  "completed_runs": 1,
+  "figures": [
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/00_all_metrics_linear_dashboard.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/01_quality_timeline.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/02_tokenizer_timeline.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/03_compute_timeline.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/04_generalization_timeline.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/05_training_histories.png",
+    "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/linear_graphs/06_hyperparameter_path.png"
+  ],
+  "latest_run_number": 1,
+  "source_ledger": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/all_run_results.jsonl"
+}

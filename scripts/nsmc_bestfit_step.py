@@ -14,7 +14,7 @@ import subprocess
 import sys
 from typing import Any
 
-from nsmc_bestfit_rules import CACHE_DIR, DECISION_REPORT_PATH, DOCS_DIR, MATRIX_PATH, NEXT_PLAN_PATH, ROOT, RUNS_DIR, TRAIN_TEXT, VAL_TEXT, apply_rules, read_json
+from nsmc_bestfit_rules import CACHE_DIR, DECISION_REPORT_PATH, DOCS_DIR, MATRIX_PATH, NEXT_PLAN_PATH, ROOT, RUNS_DIR, TRAIN_TEXT, VAL_TEXT, apply_rules
 
 
 LOCAL_DIR = ROOT / "local" / "nsmc_bestfit"
@@ -23,6 +23,8 @@ STATUS_JSON = LOCAL_DIR / "queue_status.json"
 AGGREGATE_CSV = DOCS_DIR / "aggregate_summary.csv"
 AGGREGATE_REPORT = DOCS_DIR / "aggregate_report.md"
 AGGREGATE_META = DOCS_DIR / "aggregate_meta.json"
+PLOTS_DIR = DOCS_DIR / "linear_graphs"
+PLOT_INDEX = PLOTS_DIR / "figure_index.md"
 LOCK_PATH = LOCAL_DIR / "step.lock"
 
 
@@ -39,6 +41,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-csv", type=Path, default=AGGREGATE_CSV)
     parser.add_argument("--report", type=Path, default=AGGREGATE_REPORT)
     parser.add_argument("--meta-json", type=Path, default=AGGREGATE_META)
+    parser.add_argument("--plots-dir", type=Path, default=PLOTS_DIR)
+    parser.add_argument("--plot-index", type=Path, default=PLOT_INDEX)
+    parser.add_argument("--skip-plots", action="store_true")
     parser.add_argument("--max-runs", type=int, default=1)
     parser.add_argument("--max-steps-per-run", type=int, default=None)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
@@ -169,6 +174,26 @@ def aggregate(args: argparse.Namespace) -> None:
     run_command(command, "aggregate", args.queue_log, dry_run=args.dry_run)
 
 
+def plot_graphs(args: argparse.Namespace) -> None:
+    if args.skip_plots:
+        return
+    command = [
+        sys.executable,
+        "scripts/nsmc_bestfit_plot.py",
+        "--ledger",
+        str(args.docs_dir / "all_run_results.jsonl"),
+        "--runs-dir",
+        str(args.runs_dir),
+        "--out-dir",
+        str(args.plots_dir),
+        "--index",
+        str(args.plot_index),
+        "--manifest",
+        str(args.plots_dir / "linear_graph_manifest.json"),
+    ]
+    run_command(command, "linear_graphs", args.queue_log, dry_run=args.dry_run)
+
+
 def main() -> None:
     args = parse_args()
     with step_lock(LOCK_PATH):
@@ -187,6 +212,7 @@ def main() -> None:
             ensure_cache(next_row, args)
             run_experiment(next_row, args)
             aggregate(args)
+            plot_graphs(args)
             apply_rules(matrix_path=args.matrix, runs_dir=args.runs_dir, docs_dir=args.docs_dir, write=True)
             completed += 1
         write_status(args.status_json, {"status": "idle", "completed_this_step": completed, "decision_report": str(args.docs_dir / DECISION_REPORT_PATH.name)})

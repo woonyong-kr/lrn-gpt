@@ -1,6 +1,6 @@
 # NSMC Best-Fit Decision Report
 
-- updated_at: `2026-06-03T19:30:04.322778+00:00`
+- updated_at: `2026-06-03T19:59:09.825788+00:00`
 - action: `wait_for_pending`
 - reason: `pending rows already exist`
 - planned_runs: `5`
@@ -41,6 +41,12 @@
 | phase | label | planned | completed | best_score | mean_score |
 | --- | --- | ---: | ---: | ---: | ---: |
 | phase1_tokenizer | tokenizer efficiency | 5 | 1 | 6.31541 | 6.31541 |
+
+## 누적 선형 그래프
+
+- figure index: `docs/nsmc_bestfit/linear_graphs/figure_index.md`
+- dashboard: `docs/nsmc_bestfit/linear_graphs/00_all_metrics_linear_dashboard.png`
+
 
 ## 실행 명령
 

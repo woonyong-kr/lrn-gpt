@@ -507,6 +507,7 @@ def write_rules(path: Path) -> None:
         f"- LM val: `{VAL_TEXT}`",
         "- tokenizer/cache/run 산출물은 `local/nsmc_bestfit`에 둔다.",
         "- 보고서와 matrix는 `docs/nsmc_bestfit`에 둔다.",
+        "- 누적 선형 그래프는 `docs/nsmc_bestfit/linear_graphs/figure_index.md`에 둔다.",
         "",
         "## 선택 기준",
         "",
@@ -529,6 +530,13 @@ def write_rules(path: Path) -> None:
         "현재 실행 루프는 GPT 계열과 같은 byte-level BPE를 쓴다. 따라서 `영화`와 ` 영화`는 둘 다 유효한 후보가 될 수 있다.",
         "공백 포함 토큰은 언어모델 효율에는 유리할 수 있으므로 금지하지 않는다.",
         "대신 `min_frequency`와 `vocab_size`를 같이 보고, 문장 전체가 거대한 토큰으로 커지는 후보는 bits/char와 일반화 gap에서 걸러낸다.",
+        "",
+        "## 누적 그래프 규칙",
+        "",
+        "- 모든 완료 실행은 `all_run_results.jsonl`에 원장으로 남긴다.",
+        "- 그래프는 원장을 `run_number` 순서로 읽어 누적 선형 그래프로 다시 그린다.",
+        "- 핵심 그래프는 quality, tokenizer efficiency, compute, generalization, training history, hyperparameter path를 나눠 본다.",
+        "- 가장 큰 전체 대시보드는 `00_all_metrics_linear_dashboard.png`다.",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -578,6 +586,12 @@ def write_decision_report(path: Path, plan: dict[str, Any], rows: list[dict[str,
         lines.append(f"| {row['phase']} | {row['label']} | {row['planned']} | {row['completed']} | {best} | {avg} |")
     lines.extend(
         [
+            "",
+            "## 누적 선형 그래프",
+            "",
+            "- figure index: `docs/nsmc_bestfit/linear_graphs/figure_index.md`",
+            "- dashboard: `docs/nsmc_bestfit/linear_graphs/00_all_metrics_linear_dashboard.png`",
+            "",
             "",
             "## 실행 명령",
             "",
