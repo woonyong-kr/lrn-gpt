@@ -137,22 +137,22 @@ baseline 생성 샘플은 수치만으로 보이지 않는 학습 수준을 보�
 
 해석: NSMC 리뷰는 짧은 문장이 많기 때문에, 이번 데이터에서는 긴 문맥보다 짧고 밀도 있는 문맥이 더 유리했다. 과적합 신호보다는 데이터 길이와 context 길이의 불일치가 성능 차이를 만든 것으로 보인다.
 
-### 4.2 vocab_size: 토큰 단위와 예측 class 수
+### 4.2 vocab_size: token loss와 bits/char는 다른 결론을 낸다
 
-`vocab_size`는 BPE vocabulary 크기다. 작으면 문장을 더 잘게 쪼개고, 크면 더 긴 token을 만들 수 있다. 다만 vocabulary 크기가 바뀌면 cross entropy가 예측해야 하는 class 수 자체가 달라지므로 loss를 그대로 직접 비교하면 안 된다.
+`vocab_size`는 BPE vocabulary 크기다. 작으면 문장을 더 잘게 쪼개고, 크면 더 긴 token을 만들 수 있다. 이때 `final_val_loss`는 token 하나를 맞히는 cross entropy라서, vocab 크기가 달라지면 예측 단위와 class 수가 동시에 바뀐다. 따라서 vocab 실험은 token 단위 loss만으로 결론을 내리면 안 되고, 문자 기준으로 정규화한 `bits/char`를 같이 봐야 한다.
 
-![vocab\_size metric](./docs/HY/figures/24_vocab_size_metrics.png)
+![vocab loss vs bits per char](./docs/HY/figures/64_vocab_loss_vs_bits_per_char.png)
 
-위 그래프에서는 `vocab_size=2000`이 가장 낮은 loss를 냈다. 하지만 이 값은 class 수가 줄어든 효과를 포함하므로 “언어 모델 품질이 가장 좋다”라고 바로 결론 내리면 위험하다.
+위 그래프에서 파란 선인 `token-level val loss`는 `vocab_size=2000`에서 가장 낮다. 하지만 주황 선인 `val bits/char`는 `vocab_size=5000`에서 가장 낮다. 즉 `vocab=2000`은 token 하나를 맞히기는 쉬웠지만, 문장을 더 많은 token으로 쪼개기 때문에 문자 하나를 설명하는 비용은 더 컸다.
 
-| 실험  | vocab_size    | train_tokens | final_val_loss | final_perplexity |
-| --- | ------------- | ------------ | -------------- | ---------------- |
-| E04 | 2000          | 824,128      | 4.811352       | 122.897688       |
-| E00 | 3000 baseline | 805,021      | 5.301974       | 200.732742       |
-| E05 | 4000          | 787,201      | 5.638393       | 281.010876       |
-| E06 | 5000          | 770,024      | 5.882533       | 358.716782       |
+| 실험  | vocab_size    | parameter_count | val_tokens | val_tokens/char | chars/token | final_val_loss | val_bits/char |
+| --- | ------------- | --------------- | ---------- | --------------- | ----------- | -------------- | ------------- |
+| E04 | 2000          | 2,570,112       | 78,686     | 0.652671        | 1.532166    | 4.811352       | 4.530393      |
+| E00 | 3000 baseline | 2,954,112       | 70,386     | 0.583825        | 1.712841    | 5.301974       | 4.465758      |
+| E05 | 4000          | 3,338,112       | 65,634     | 0.544409        | 1.836853    | 5.638393       | 4.428488      |
+| E06 | 5000          | 3,722,112       | 62,493     | 0.518356        | 1.929176    | 5.882533       | 4.399133      |
 
-해석: 현재 데이터 규모에서는 큰 vocabulary가 만든 긴 token을 충분히 학습하지 못했고, sparse한 token 분포가 손해로 작용한 것으로 보인다. 이 실험은 vocabulary 크기에 따라 예측 class 수가 달라지므로, 과적합 여부보다 loss 직접 비교의 한계가 더 중요하다.
+해석: token loss 기준으로는 `vocab_size=2000`이 가장 좋지만, tokenizer가 달라진 실험에서는 이 비교가 공정하지 않다. `val_bits/char` 기준으로는 `vocab_size=5000`이 가장 낮아 문자 단위 언어모델 품질은 더 좋게 나온다. 다만 `vocab_size=5000`은 baseline보다 파라미터 수가 약 26.0% 많고 token 처리량도 낮아질 수 있으므로, 최종 선택은 `bits/char` 개선과 계산 비용을 함께 본 trade-off로 해석해야 한다.
 
 ### 4.3 emb_dim: 토큰 표현 벡터의 폭
 
@@ -196,51 +196,24 @@ baseline 생성 샘플은 수치만으로 보이지 않는 학습 수준을 보�
 
 `n_layers`는 Transformer block을 몇 층 쌓을지 정한다. 깊어질수록 표현력은 커지지만 계산량과 최적화 난이도도 증가한다.
 
-![n\_layers metric](./docs/HY/figures/27_n_layers_metrics.png)
-
-위 그래프에서 5 epoch 기준 baseline은 `n_layers=4`다. `2`, `6`, `8` 모두 baseline보다 좋은 validation loss를 내지 못했다.
-
-| 실험  | n_layers   | parameter_count | final_val_loss | tokens_per_sec |
-| --- | ---------- | --------------- | -------------- | -------------- |
-| E11 | 2          | 2,065,536       | 5.321256       | 324,062.829    |
-| E00 | 4 baseline | 2,954,112       | 5.301974       | 195,309.463    |
-| E12 | 6          | 3,842,688       | 5.312068       | 141,418.098    |
-| E13 | 8          | 4,731,264       | 5.317900       | 109,846.398    |
-
-해석: 짧은 5 epoch에서는 깊이를 늘려도 이득이 없었다. 하지만 10 epoch의 depth-8 재실험에서는 `E37`이 5.070909까지 내려갔으므로, 깊이 실험은 epoch와 norm 위치를 함께 봐야 한다.
-
-![n\_layers norm 20 epoch metric](./docs/HY/figures/47_n_layers_norm_20ep_metrics.png)
-
-위 20 epoch 재실험에서는 깊이와 norm 위치의 상호작용이 분명해졌다. 4-layer post-LN 기준인 `E23`보다 8-layer pre-LN `E46`과 12-layer pre-LN `E48`이 final validation loss를 더 낮췄다. 반면 12-layer post-LN `E47`은 loss가 7.29 수준에 머물러 사실상 학습 실패 또는 최적화 불안정으로 보인다.
-
-![n\_layers norm 20 epoch curve](./docs/HY/figures/48_n_layers_norm_20ep_curves.png)
-
-위 곡선에서 8-layer post-LN은 초반에는 내려가지만 후반 final loss가 best보다 다시 올라간다. 8-layer pre-LN과 12-layer pre-LN은 더 늦게 수렴하지만 20 epoch 마지막까지 안정적으로 내려간다. 12-layer post-LN은 다른 실험과 전혀 다른 높은 loss 영역에 머물러 깊은 post-LN 설정이 현재 lr에서 불안정하다는 신호다.
-
-| 실험  | n_layers | norm 위치          | num_epochs | parameter_count | final_train_loss | final_val_loss | loss_gap  | best_val_loss |
-| --- | -------- | ---------------- | ---------- | --------------- | ---------------- | -------------- | --------- | ------------- |
-| E23 | 4        | post-LN baseline | 20         | 2,954,112       | 4.040717         | 5.059713       | 1.018996  | 5.044847      |
-| E45 | 8        | post-LN          | 20         | 4,731,264       | 3.819977         | 5.077443       | 1.257466  | 5.026342      |
-| E46 | 8        | pre-LN           | 20         | 4,731,264       | 4.239478         | 5.018016       | 0.778538  | 5.018016      |
-| E47 | 12       | post-LN          | 20         | 6,508,416       | 7.291051         | 7.290566       | -0.000485 | 7.290378      |
-| E48 | 12       | pre-LN           | 20         | 6,508,416       | 4.156517         | 5.018293       | 0.861776  | 5.018293      |
-
-해석: 깊이를 8층 이상으로 늘릴 때는 epoch와 norm 위치를 같이 조정해야 한다. 10 epoch에서는 post-LN이 좋아 보였지만, 20 epoch에서는 pre-LN이 8층과 12층 모두에서 더 안정적인 final validation loss를 냈다. 특히 12-layer post-LN 붕괴는 깊은 모델에서 post-LN이 현재 설정에 취약하다는 강한 증거다.
-
-다만 위 실험은 `lr=0.0004`, `drop_rate=0.1` 조건이라 깊은 모델에서 과적합과 최적화 불안정이 섞여 있었다. 그래서 `lr=0.0002`, `drop_rate=0.2`, `weight_decay=0.1`로 학습 강도와 정규화를 조정한 후 `8-layer/12-layer x post-LN/pre-LN` 2x2 실험을 다시 수행했다.
+깊은 모델은 단순히 layer 수만 늘린다고 좋아지는 것이 아니라, 학습 안정성을 함께 맞춰야 한다. 따라서 `lr=0.0002`, `drop_rate=0.2`, `weight_decay=0.1` 조건에서 `8-layer/12-layer x post-LN/pre-LN` 2x2 실험을 비교했다.
 
 ![regularized norm depth metric](./docs/HY/figures/62_regularized_norm_depth_metrics.png)
 
 ![regularized norm depth curve](./docs/HY/figures/63_regularized_norm_depth_curves.png)
 
-| 실험  | n_layers | norm 위치 | drop_rate | lr     | final_train_loss | final_val_loss | loss_gap | best_val_loss |
-| --- | -------- | ------- | --------- | ------ | ---------------- | -------------- | -------- | ------------- |
-| E60 | 8        | post-LN | 0.2       | 0.0002 | 4.606819         | 5.068817       | 0.461998 | 5.068817      |
-| E61 | 8        | pre-LN  | 0.2       | 0.0002 | 4.895616         | 5.191477       | 0.295861 | 5.191477      |
-| E62 | 12       | post-LN | 0.2       | 0.0002 | 4.569018         | 5.060854       | 0.491836 | 5.060854      |
-| E63 | 12       | pre-LN  | 0.2       | 0.0002 | 4.832398         | 5.142445       | 0.310047 | 5.142445      |
+| 실험  | n_layers | norm 위치 | drop_rate | lr     | final_train_loss | final_val_loss | loss_gap | 실행 시간 |
+| --- | -------- | ------- | --------- | ------ | ---------------- | -------------- | -------- | ----- |
+| E60 | 8        | post-LN | 0.2       | 0.0002 | 4.606819         | 5.068817       | 0.461998 | 139.5초 |
+| E61 | 8        | pre-LN  | 0.2       | 0.0002 | 4.895616         | 5.191477       | 0.295861 | 150.6초 |
+| E62 | 12       | post-LN | 0.2       | 0.0002 | 4.569018         | 5.060854       | 0.491836 | 205.2초 |
+| E63 | 12       | pre-LN  | 0.2       | 0.0002 | 4.832398         | 5.142445       | 0.310047 | 206.4초 |
 
-정규화 조건 해석: `drop_rate=0.2`와 낮은 lr을 적용하자 8-layer와 12-layer 모두 gap이 0.5 이하로 내려갔다. 즉 기존 E45/E46/E48에서 보이던 큰 gap은 깊이 자체만의 문제가 아니라 학습 강도와 정규화 설정의 영향을 크게 받았다. 이 조건에서는 post-LN이 pre-LN보다 validation loss가 낮았고, 12-layer post-LN도 더 이상 붕괴하지 않았다. 따라서 “깊은 모델이면 무조건 pre-LN이 낫다”가 아니라, 현재 데이터/규모에서는 `lr`과 `drop_rate`를 안정적으로 잡으면 post-LN도 12-layer까지 학습 가능하다는 결론이 더 정확하다. 다만 pre-LN은 gap이 더 작아 보수적인 일반화 측면에서는 여전히 안정적인 선택이다.
+실험 결과 `12-layer post-LN(E62)`이 네 조건 중 가장 낮은 validation loss인 `5.060854`를 냈다. 즉 안정화된 학습 조건에서는 12-layer까지 깊이를 늘려도 학습이 가능했고, validation loss 기준으로는 post-LN 조합이 pre-LN보다 더 좋았다.
+
+다만 `E62`가 `8-layer post-LN(E60)`보다 낮춘 validation loss는 약 `0.008`에 불과한 반면, 실행 시간은 `139.5초`에서 `205.2초`로 크게 늘었다. 즉 12-layer는 안정화 조건에서 학습 가능하지만, 현재 데이터와 모델 크기에서는 비용 대비 개선 폭이 작다.
+
+또한 pre-LN은 8-layer와 12-layer 모두에서 post-LN보다 validation loss는 높았지만 loss gap은 더 작았다. 따라서 이번 실험의 결론은 “깊은 모델이면 무조건 pre-LN”이 아니라, 낮은 lr과 충분한 dropout을 주면 post-LN도 12-layer까지 학습 가능하고, pre-LN은 더 보수적인 일반화 성향을 보인다는 것이다.
 
 ### 4.6 ffn_multiplier: FFN 내부 계산 공간의 크기
 
@@ -283,10 +256,10 @@ hidden_dim = emb_dim * ffn_multiplier
 위 곡선은 seed 3개의 평균 validation loss와 평균 gap을 보여준다. ReLU는 학습 데이터에는 더 빠르게 맞지만 gap이 꾸준히 크게 벌어진다. GELU는 ReLU보다 train loss는 높지만 validation loss 평균이 더 낮고, SiLU는 gap은 작지만 underfit 성향으로 validation loss가 높다.
 
 | activation | seed 수 | final_val_loss 평균 | final_val_loss 표준편차 | best_val_loss 평균 | final_train_loss 평균 | loss_gap 평균 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GELU | 3 | 5.014631 | 0.010777 | 5.014631 | 4.201402 | 0.813229 |
-| ReLU | 3 | 5.056711 | 0.004298 | 5.049802 | 4.003249 | 1.053462 |
-| SiLU | 3 | 5.126724 | 0.011430 | 5.126724 | 4.484840 | 0.641883 |
+| ---------- | ------ | ----------------- | ------------------- | ---------------- | ------------------- | ----------- |
+| GELU       | 3      | 5.014631          | 0.010777            | 5.014631         | 4.201402            | 0.813229    |
+| ReLU       | 3      | 5.056711          | 0.004298            | 5.049802         | 4.003249            | 1.053462    |
+| SiLU       | 3      | 5.126724          | 0.011430            | 5.126724         | 4.484840            | 0.641883    |
 
 해석: 8-layer pre-LN 20 epoch seed 반복에서는 GELU가 가장 좋은 평균 validation loss를 냈다. ReLU는 train loss를 가장 낮게 만들지만 gap이 커서 일반화가 나빠졌고, SiLU는 gap은 작지만 train/validation loss가 모두 높아 underfit에 가깝다. 따라서 이번 모델에서는 Transformer FFN activation으로 GELU가 가장 적합하다고 볼 수 있다.
 
@@ -388,18 +361,18 @@ qkv_bias=True : Q = xW + b
 
 초기 5~20 epoch 비교는 weight tying의 결론을 내리기에는 학습이 짧거나 중간 관찰에 가까웠다. 최종 판단에는 장기 학습에서 과적합 차이가 분명하게 드러난 50 epoch 비교만 사용한다.
 
-![weight_tying final metric](./docs/HY/figures/49_weight_tying_final_metrics.png)
+![weight\_tying final metric](./docs/HY/figures/49_weight_tying_final_metrics.png)
 
 위 그래프에서 `weight_tying=True`는 `False`보다 final validation loss가 낮다. 중요한 점은 `True`가 train loss를 더 빠르게 낮춘 것이 아니라, 긴 학습에서 validation loss 악화를 덜 만들었다는 것이다.
 
-![weight_tying final curve](./docs/HY/figures/50_weight_tying_final_curves.png)
+![weight\_tying final curve](./docs/HY/figures/50_weight_tying_final_curves.png)
 
 위 그래프는 왼쪽에 train/validation loss를 함께 그리고, 오른쪽에 `validation loss - train loss` gap을 따로 그린 것이다. `weight_tying=False`는 train loss가 훨씬 빠르게 내려가지만 validation loss는 후반에 크게 올라가고 gap도 2.27까지 커진다. 반대로 `weight_tying=True`는 train loss가 덜 내려가지만 validation loss 상승과 gap 증가가 더 작다. 즉 weight tying의 효과는 빠른 fitting이 아니라 과적합 완화로 봐야 한다.
 
-| 실험 | weight_tying | num_epochs | parameter_count | final_train_loss | final_val_loss | loss_gap |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| E43 | False baseline | 50 | 2,954,112 | 3.117082 | 5.390571 | 2.273488 |
-| E44 | True | 50 | 2,378,112 | 3.672257 | 5.077142 | 1.404885 |
+| 실험  | weight_tying   | num_epochs | parameter_count | final_train_loss | final_val_loss | loss_gap |
+| --- | -------------- | ---------- | --------------- | ---------------- | -------------- | -------- |
+| E43 | False baseline | 50         | 2,954,112       | 3.117082         | 5.390571       | 2.273488 |
+| E44 | True           | 50         | 2,378,112       | 3.672257         | 5.077142       | 1.404885 |
 
 | 실험             | best_val_loss | best_step | final_val_loss | best 대비 final 악화 |
 | -------------- | ------------- | --------- | -------------- | ---------------- |
