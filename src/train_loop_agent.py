@@ -26,9 +26,9 @@ from typing import Any
 import torch
 
 try:
-    from .experiments import LMExperimentConfig, load_corpus, resolve_device, run_experiment_plan, write_plan
+    from .experiments import LMExperimentConfig, estimate_steps_per_epoch, load_corpus, resolve_device, run_experiment_plan, write_plan
 except ImportError:
-    from experiments import LMExperimentConfig, load_corpus, resolve_device, run_experiment_plan, write_plan
+    from experiments import LMExperimentConfig, estimate_steps_per_epoch, load_corpus, resolve_device, run_experiment_plan, write_plan
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +59,8 @@ LEADERBOARD_FIELDS = [
     "context_length",
     "stride",
     "batch_size",
+    "epochs",
+    "steps_per_epoch",
     "max_steps",
     "learning_rate",
     "weight_decay",
@@ -95,12 +97,15 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run one self-managed mini GPT experiment loop iteration.")
     parser.add_argument("--dry-run", action="store_true", help="Initialize docs and print the next plan without training.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
-    parser.add_argument("--max-steps", type=int, default=None, help="Override the generated run's max_steps.")
+    parser.add_argument("--epochs", type=float, default=None, help="Override the generated run's epoch count.")
+    parser.add_argument("--max-steps", type=int, default=None, help="Legacy override for the generated run's update count.")
     parser.add_argument("--corpus-path", type=Path, default=None)
     parser.add_argument("--char-limit", type=int, default=20_000)
     parser.add_argument("--force", action="store_true", help="Ignore a stale-looking lock and continue.")
     parser.add_argument("--plan-file", type=Path, default=NEXT_PLAN_PATH, help="Optional LLM-authored JSON plan to use before rule-based fallback.")
     args = parser.parse_args(argv)
+    if args.epochs is not None and args.max_steps is not None:
+        parser.error("--epochs and --max-steps are mutually exclusive")
 
     ensure_train_scaffold()
     hardware = inspect_hardware(args.device)
@@ -125,14 +130,19 @@ def main(argv: list[str] | None = None) -> None:
     if active_lock and args.force:
         LOCK_PATH.unlink(missing_ok=True)
 
-    leaderboard_rows = read_leaderboard()
+    leaderboard_rows = backfill_leaderboard_epoch_fields(read_leaderboard())
+    if leaderboard_rows:
+        write_leaderboard(leaderboard_rows)
     if leaderboard_rows:
         refresh_visual_metrics_from_leaderboard(leaderboard_rows)
     next_run_id = next_run_number(state, leaderboard_rows)
     plan = choose_next_experiment(next_run_id, leaderboard_rows, hardware)
     plan = apply_llm_plan_override(plan, args.plan_file, next_run_id)
+    if args.epochs is not None:
+        plan.config = replace(plan.config, epochs=args.epochs)
+        plan.changed_variables = {**plan.changed_variables, "epochs": args.epochs}
     if args.max_steps is not None:
-        plan.config = replace(plan.config, max_steps=args.max_steps)
+        plan.config = replace(plan.config, epochs=None, max_steps=args.max_steps)
         plan.changed_variables = {**plan.changed_variables, "max_steps": args.max_steps}
 
     if args.dry_run:
@@ -325,8 +335,9 @@ def ensure_train_scaffold() -> None:
         HYPOTHESES_PATH.write_text("# 자동 실험 가설 기록\n\n아직 완료된 실험이 없습니다.\n", encoding="utf-8")
     if not LEADERBOARD_PATH.exists():
         write_leaderboard([])
-    if not NEXT_PLAN_SCHEMA_PATH.exists():
-        NEXT_PLAN_SCHEMA_PATH.write_text(json.dumps(next_plan_schema(), ensure_ascii=False, indent=2), encoding="utf-8")
+    schema_text = json.dumps(next_plan_schema(), ensure_ascii=False, indent=2)
+    if not NEXT_PLAN_SCHEMA_PATH.exists() or NEXT_PLAN_SCHEMA_PATH.read_text(encoding="utf-8") != schema_text:
+        NEXT_PLAN_SCHEMA_PATH.write_text(schema_text, encoding="utf-8")
 
 
 def next_plan_schema() -> dict[str, Any]:
@@ -496,22 +507,23 @@ def choose_next_experiment(run_id: int, leaderboard_rows: list[dict[str, str]], 
         )
 
     if latest_status == "underfit_or_too_short":
+        next_epochs = round((base.epochs or (base.max_steps / 20)) * 1.5, 6)
         config = replace(
             base,
             run_id=run_id,
             seed=base.seed + 11,
-            max_steps=min(300, int(base.max_steps * 1.5) + 1),
+            epochs=min(8.0, max(0.25, next_epochs)),
             learning_rate=5e-4 if base.learning_rate <= 3e-4 else base.learning_rate,
             emb_dim=min(256, base.emb_dim + 32),
             n_layers=min(4, base.n_layers + 1),
         )
         config = ensure_head_divisible(config)
-        hypothesis = "과소학습 완화: 학습 step과 표현력을 늘려 validation 개선 여지가 있는지 확인한다."
+        hypothesis = "과소학습 완화: 학습 epoch와 표현력을 늘려 validation 개선 여지가 있는지 확인한다."
         return ExperimentPlan(
             config=replace(config, hypothesis=hypothesis),
             hypothesis=hypothesis,
             rationale="train과 validation이 모두 충분히 내려가지 않았으므로 학습량 또는 표현력이 부족할 가능성이 있다.",
-            changed_variables={"max_steps": config.max_steps, "learning_rate": config.learning_rate, "emb_dim": config.emb_dim, "n_layers": config.n_layers},
+            changed_variables={"epochs": config.epochs, "learning_rate": config.learning_rate, "emb_dim": config.emb_dim, "n_layers": config.n_layers},
             fixed_variables=fixed,
             expected_result="train/val loss가 함께 내려가고 gap 증가는 작게 유지된다.",
             next_if_success="capacity 증가 폭을 유지하되 seed를 바꿔 재검증한다.",
@@ -567,6 +579,7 @@ def config_from_row(row: dict[str, str], run_id: int, hardware: dict[str, Any]) 
         context_length=parse_int(row.get("context_length"), fallback.context_length),
         stride=parse_optional_int(row.get("stride")),
         batch_size=parse_int(row.get("batch_size"), fallback.batch_size),
+        epochs=parse_optional_float(row.get("epochs"), fallback.epochs),
         max_steps=parse_int(row.get("max_steps"), fallback.max_steps),
         learning_rate=parse_float(row.get("learning_rate"), fallback.learning_rate),
         weight_decay=parse_float(row.get("weight_decay"), fallback.weight_decay),
@@ -623,6 +636,60 @@ def read_leaderboard() -> list[dict[str, str]]:
         return list(csv.DictReader(file))
 
 
+def backfill_leaderboard_epoch_fields(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Populate epoch columns for legacy rows that only stored max_steps."""
+    backfilled: list[dict[str, Any]] = []
+    for row in rows:
+        updated = dict(row)
+        if updated.get("epochs") not in (None, "") and updated.get("steps_per_epoch") not in (None, ""):
+            updated["changed_variables"] = epochize_changed_variables(updated.get("changed_variables"), updated.get("epochs"), updated.get("max_steps"))
+            backfilled.append(updated)
+            continue
+
+        artifact_dir_text = updated.get("artifact_dir") or ""
+        result = load_artifact_result(ROOT / artifact_dir_text) if artifact_dir_text else None
+        max_steps = parse_int((result or {}).get("max_steps") or updated.get("max_steps"), 0)
+        steps_per_epoch = parse_int((result or {}).get("steps_per_epoch"), 0)
+
+        if steps_per_epoch <= 0 and result:
+            train_token_count = parse_int(result.get("train_token_count"), 0)
+            context_length = parse_int(result.get("context_length") or updated.get("context_length"), 0)
+            batch_size = parse_int(result.get("batch_size") or updated.get("batch_size"), 0)
+            stride = parse_optional_int(result.get("stride") if result.get("stride") not in (None, "") else updated.get("stride"))
+            if train_token_count > 0 and context_length > 0 and batch_size > 0:
+                steps_per_epoch = estimate_steps_per_epoch(train_token_count, context_length, batch_size, stride)
+
+        epochs = parse_optional_float((result or {}).get("epochs"), None)
+        if epochs is None and max_steps > 0 and steps_per_epoch > 0:
+            epochs = max_steps / steps_per_epoch
+
+        if epochs is not None:
+            updated["epochs"] = round(epochs, 6)
+        if steps_per_epoch > 0:
+            updated["steps_per_epoch"] = steps_per_epoch
+        if max_steps > 0:
+            updated["max_steps"] = max_steps
+        updated["changed_variables"] = epochize_changed_variables(updated.get("changed_variables"), updated.get("epochs"), updated.get("max_steps"))
+        backfilled.append(updated)
+    return backfilled
+
+
+def epochize_changed_variables(changed_variables: Any, epochs: Any, max_steps: Any) -> Any:
+    if changed_variables in (None, "") or epochs in (None, ""):
+        return changed_variables
+    try:
+        payload = json.loads(str(changed_variables))
+    except json.JSONDecodeError:
+        return changed_variables
+    if not isinstance(payload, dict) or "max_steps" not in payload:
+        return changed_variables
+    payload = dict(payload)
+    legacy_steps = payload.pop("max_steps")
+    payload.setdefault("epochs", epochs)
+    payload.setdefault("effective_max_steps", max_steps or legacy_steps)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
 def write_leaderboard(rows: list[dict[str, Any]]) -> None:
     LEADERBOARD_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LEADERBOARD_PATH.open("w", encoding="utf-8", newline="") as file:
@@ -644,7 +711,9 @@ def leaderboard_row(plan: ExperimentPlan, result: dict[str, Any], artifact_dir: 
         "context_length": config.context_length,
         "stride": "" if config.stride is None else config.stride,
         "batch_size": config.batch_size,
-        "max_steps": config.max_steps,
+        "epochs": result.get("epochs", config.epochs),
+        "steps_per_epoch": result.get("steps_per_epoch"),
+        "max_steps": result.get("max_steps", config.max_steps),
         "learning_rate": config.learning_rate,
         "weight_decay": config.weight_decay,
         "grad_clip": "" if config.grad_clip is None else config.grad_clip,
@@ -786,6 +855,9 @@ def build_metrics_summary(leaderboard_rows: list[dict[str, Any]]) -> list[dict[s
                 "risk_level": overfit_risk_level(row),
                 "best_candidate": str(run_id == best_run_id),
                 "selection_score": round(selection_score, 6),
+                "epochs": numeric_or_blank(row.get("epochs")),
+                "steps_per_epoch": numeric_or_blank(row.get("steps_per_epoch")),
+                "max_steps": numeric_or_blank(row.get("max_steps")),
                 "final_train_loss": numeric_or_blank(row.get("final_train_loss")),
                 "final_val_loss": numeric_or_blank(row.get("final_val_loss")),
                 "final_generalization_gap": numeric_or_blank(row.get("final_generalization_gap")),
@@ -863,11 +935,12 @@ def render_latest_run_svg(result: dict[str, Any]) -> str:
     ]
     status = str(result.get("fit_status") or "unknown")
     run_id = result.get("run_id", "?")
+    epoch_text = f"epochs={numeric_or_blank(result.get('epochs'))} / steps={numeric_or_blank(result.get('max_steps'))}"
     parts = [
         svg_header(width, height),
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(34, 42, f"Run {run_id} Metrics", size=23, weight="700"),
-        svg_text(34, 68, f"fit_status={status} / device={result.get('device', '')} / tokens_per_sec={numeric_or_blank(result.get('tokens_per_sec'))}", size=13, fill="#475569"),
+        svg_text(34, 68, f"fit_status={status} / {epoch_text} / device={result.get('device', '')} / tokens_per_sec={numeric_or_blank(result.get('tokens_per_sec'))}", size=13, fill="#475569"),
     ]
     parts.extend(render_bar_panel(loss_items, 48, 108, 710, 170, "Loss Snapshot", "#2563eb"))
     parts.extend(render_bar_panel(overfit_items, 48, 338, 710, 125, "Overfit Signals", "#7c3aed", max_hint=0.18))
@@ -993,7 +1066,7 @@ def write_dashboard(summary_rows: list[dict[str, Any]]) -> None:
     best = min(summary_rows, key=lambda row: parse_float(row.get("selection_score"), 1e9)) if summary_rows else {}
     recent_rows = summary_rows[-10:]
     table_rows = "\n".join(
-        f"| {row.get('run_id')} | {row.get('fit_status')} | {row.get('risk_level')} | {row.get('final_train_loss')} | {row.get('final_val_loss')} | {row.get('final_generalization_gap')} | {row.get('overfit_score')} |"
+        f"| {row.get('run_id')} | {row.get('fit_status')} | {row.get('risk_level')} | {row.get('epochs')} | {row.get('max_steps')} | {row.get('final_train_loss')} | {row.get('final_val_loss')} | {row.get('final_generalization_gap')} | {row.get('overfit_score')} |"
         for row in recent_rows
     )
     content = f"""# mini GPT 학습 대시보드
@@ -1003,6 +1076,7 @@ def write_dashboard(summary_rows: list[dict[str, Any]]) -> None:
 ## 현재 요약
 
 - 최신 run: `{latest.get("run_id", "")}` / status=`{latest.get("fit_status", "")}` / risk=`{latest.get("risk_level", "")}`
+- 최신 epochs: `{latest.get("epochs", "")}` / effective steps=`{latest.get("max_steps", "")}` / steps_per_epoch=`{latest.get("steps_per_epoch", "")}`
 - 최신 final_val_loss: `{latest.get("final_val_loss", "")}`
 - 최신 generalization gap: `{latest.get("final_generalization_gap", "")}`
 - 최신 overfit_score: `{latest.get("overfit_score", "")}`
@@ -1018,8 +1092,8 @@ def write_dashboard(summary_rows: list[dict[str, Any]]) -> None:
 
 ## 최근 10회
 
-| run | status | risk | train | val | gap | overfit |
-| --- | --- | --- | --- | --- | --- | --- |
+| run | status | risk | epochs | steps | train | val | gap | overfit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 {table_rows}
 
 ## 파일
@@ -1071,6 +1145,14 @@ def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, 
 {json.dumps(asdict(config), ensure_ascii=False, indent=2)}
 ```
 
+## 학습 길이
+
+| 항목 | 값 |
+| --- | --- |
+| epochs | {result.get("epochs")} |
+| steps_per_epoch | {result.get("steps_per_epoch")} |
+| effective max_steps | {result.get("max_steps")} |
+
 ## 실행 환경
 
 ```json
@@ -1093,6 +1175,9 @@ def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, 
 | train_val_improvement_gap | {result.get("train_val_improvement_gap")} |
 | overfit_score | {result.get("overfit_score")} |
 | fit_status | {result.get("fit_status")} |
+| epochs | {result.get("epochs")} |
+| steps_per_epoch | {result.get("steps_per_epoch")} |
+| effective max_steps | {result.get("max_steps")} |
 | parameter_count | {result.get("parameter_count")} |
 | tokens_per_sec | {result.get("tokens_per_sec")} |
 | elapsed_sec | {result.get("elapsed_sec")} |
@@ -1158,7 +1243,7 @@ def append_hypothesis_log(plan: ExperimentPlan, result: dict[str, Any], report_p
 - 근거: {plan.rationale}
 - 바꾼 변수: `{json.dumps(plan.changed_variables, ensure_ascii=False, sort_keys=True)}`
 - 기대 결과: {plan.expected_result}
-- 실제 결과: final_val_loss={result.get("final_val_loss")}, gap={result.get("final_generalization_gap")}, overfit_score={result.get("overfit_score")}, fit_status={result.get("fit_status")}
+- 실제 결과: epochs={result.get("epochs")}, steps={result.get("max_steps")}, final_val_loss={result.get("final_val_loss")}, gap={result.get("final_generalization_gap")}, overfit_score={result.get("overfit_score")}, fit_status={result.get("fit_status")}
 - 과적합 판단: {interpret_result(result)}
 - 다음 가설: 성공 시 {plan.next_if_success} / 과적합 시 {plan.next_if_overfit}
 """
@@ -1175,14 +1260,14 @@ def interpret_result(result: dict[str, Any]) -> str:
     if status == "generalizing":
         return f"일반화 개선 신호. final gap={gap:.4f}, overfit_score={overfit:.4f}. seed 반복으로 재현성을 확인할 만하다."
     if status == "underfit_or_too_short":
-        return f"과소학습 또는 너무 짧은 학습. final gap={gap:.4f}. step/capacity 증가를 검토한다."
+        return f"과소학습 또는 너무 짧은 학습. final gap={gap:.4f}. epoch/capacity 증가를 검토한다."
     if status == "val_regressed":
         return f"validation 악화. final gap={gap:.4f}. learning rate나 capacity를 보수적으로 조정한다."
     return f"혼합 신호. final gap={gap:.4f}, overfit_score={overfit:.4f}. 한 축만 바꾼 후속 실험이 필요하다."
 
 
 def result_summary(result: dict[str, Any]) -> dict[str, Any]:
-    keys = ["final_train_loss", "final_val_loss", "final_generalization_gap", "overfit_score", "fit_status", "parameter_count", "tokens_per_sec", "device"]
+    keys = ["epochs", "steps_per_epoch", "max_steps", "final_train_loss", "final_val_loss", "final_generalization_gap", "overfit_score", "fit_status", "parameter_count", "tokens_per_sec", "device"]
     return {key: result.get(key) for key in keys}
 
 
@@ -1218,6 +1303,8 @@ python -m src.train_loop_agent
 
 ## 결과 해석 기준
 
+- `epochs`는 사람이 지정하는 학습 길이이고, 실행 시 `steps_per_epoch`와 곱해 실제 optimizer update 수인 `max_steps`로 환산된다.
+- 과거 호환성을 위해 `max_steps`도 기록하지만, 새 실험 계획은 가능하면 `epochs`를 사용한다.
 - `final_val_loss`가 낮을수록 좋다.
 - `final_generalization_gap = final_val_loss - final_train_loss`가 커지면 과적합 위험이다.
 - `overfit_score`는 낮을수록 좋다.

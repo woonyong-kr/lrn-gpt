@@ -22,6 +22,7 @@
         "context_length",
         "drop_rate",
         "emb_dim",
+        "epochs",
         "eval_batches",
         "ffn_dropout_position",
         "ffn_mult",

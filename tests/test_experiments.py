@@ -121,12 +121,47 @@ def test_experiment_result_contains_required_metrics():
         "final_generalization_gap",
         "overfit_score",
         "fit_status",
+        "epochs",
+        "steps_per_epoch",
+        "max_steps",
         "parameter_count",
         "tokens_per_sec",
         "elapsed_sec",
         "device",
     ]:
         assert key in result
+
+
+def test_epoch_option_resolves_to_loader_length():
+    """epochs 옵션이 train DataLoader 길이에 맞춰 실제 update 수로 환산되는지 확인한다."""
+    from experiments import LMExperimentConfig, estimate_steps_per_epoch, run_language_model_experiment
+
+    corpus = ("hello world. " * 400).strip()
+    config = LMExperimentConfig(
+        run_id=1,
+        hypothesis="epoch smoke",
+        vocab_size=260,
+        context_length=8,
+        batch_size=2,
+        epochs=1.0,
+        max_steps=99,
+        eval_batches=1,
+        emb_dim=16,
+        n_heads=4,
+        n_layers=1,
+        drop_rate=0.0,
+    )
+    result = run_language_model_experiment(config, corpus=corpus, device=torch.device("cpu"))
+
+    expected_steps = estimate_steps_per_epoch(
+        int(result["train_token_count"]),
+        context_length=config.context_length,
+        batch_size=config.batch_size,
+        stride=config.stride,
+    )
+    assert result["epochs"] == 1.0
+    assert result["steps_per_epoch"] == expected_steps
+    assert result["max_steps"] == expected_steps
 
 
 def test_compute_overfit_metrics_flags_overfit_risk():

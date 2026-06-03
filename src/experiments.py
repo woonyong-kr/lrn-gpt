@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import random
 import time
 from dataclasses import asdict, dataclass, replace
@@ -33,13 +34,14 @@ HYPOTHESES = {
     "vocab_size": "어휘가 커지면 byte sequence가 짧아질 수 있지만 LM head가 커져 작은 데이터에서는 과적합과 속도 저하가 생길 수 있습니다.",
     "context_length": "문맥 길이가 길수록 장거리 의존성을 볼 수 있지만 attention 비용이 늘고 작은 데이터에서는 학습 sample 수가 줄어들 수 있습니다.",
     "stride": "stride를 줄이면 겹치는 학습 sample이 늘어 loss는 안정될 수 있지만 데이터 중복으로 과적합 신호가 커질 수 있습니다.",
-    "batch_size": "batch가 커지면 gradient noise가 줄어 안정적이지만 같은 step 수에서는 업데이트 다양성이 줄 수 있습니다.",
+    "batch_size": "batch가 커지면 gradient noise가 줄어 안정적이지만 같은 epoch 수에서는 update 수와 다양성이 달라질 수 있습니다.",
+    "epochs": "epoch 수가 늘면 전체 데이터 윈도우를 더 많이 반복해 validation loss를 낮출 수 있지만 작은 corpus에서는 과적합 위험도 커집니다.",
     "learning_rate": "학습률이 크면 초반 loss는 빨리 내려가지만 발산/불안정 위험이 커집니다.",
     "weight_decay": "weight decay는 과적합을 줄일 수 있지만 작은 모델/짧은 학습에서는 underfit을 만들 수 있습니다.",
     "emb_dim": "embedding 폭이 커지면 표현력과 파라미터 수가 함께 늘어 train loss는 내려가고 val gap은 커질 수 있습니다.",
     "n_heads": "head 수는 attention 관점을 나누지만 head_dim이 작아지면 한 head의 표현력이 줄 수 있습니다.",
     "n_layers": "layer 수가 늘면 조합적 표현력이 늘지만 작은 데이터와 짧은 학습에서는 최적화가 어려워질 수 있습니다.",
-    "drop_rate": "dropout은 regularization을 주지만 데이터/step이 작으면 학습 속도를 늦출 수 있습니다.",
+    "drop_rate": "dropout은 regularization을 주지만 데이터/epoch가 작으면 학습 속도를 늦출 수 있습니다.",
     "qkv_bias": "QKV bias는 attention projection의 자유도를 늘리지만 파라미터 증가 대비 효과가 작을 수 있습니다.",
     "ffn_mult": "FFN 확장 배율이 커지면 token별 비선형 변환 능력이 늘지만 계산량과 과적합 위험도 늘어납니다.",
     "norm_first": "Pre-LN은 깊은 모델에서 gradient 흐름이 안정적일 수 있고, Post-LN은 얕은 모델에서 기준 구현과 비교하기 좋습니다.",
@@ -68,6 +70,7 @@ class LMExperimentConfig:
     context_length: int = 64
     stride: int | None = None
     batch_size: int = 8
+    epochs: float | None = None
     max_steps: int = 20
     eval_batches: int = 4
     train_ratio: float = 0.9
@@ -117,6 +120,7 @@ ONE_FACTOR_VALUES: dict[str, list[Any]] = {
     "context_length": [32, 128],
     "stride": [32],
     "batch_size": [4, 16],
+    "epochs": [1.0, 3.0],
     "learning_rate": [1e-4, 5e-4, 1e-3],
     "weight_decay": [0.0, 0.1],
     "grad_clip": [None, 0.5],
@@ -167,6 +171,8 @@ def validate_experiment_config(config: LMExperimentConfig) -> None:
         raise ValueError("context_length must be positive")
     if config.batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    if config.epochs is not None and config.epochs <= 0:
+        raise ValueError("epochs must be positive")
     if config.max_steps <= 0:
         raise ValueError("max_steps must be positive")
     if not 0.0 < config.train_ratio < 1.0:
@@ -232,6 +238,8 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
 
     model = GPTModel(config.to_model_config()).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+    steps_per_epoch = len(train_loader)
+    effective_max_steps, resolved_epochs = resolve_training_length(config, steps_per_epoch)
 
     initial_train_loss = calc_loss_loader(train_loader, model, device, num_batches=config.eval_batches)
     initial_val_loss = calc_loss_loader(val_loader, model, device, num_batches=config.eval_batches)
@@ -242,7 +250,7 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
     train_iter = iter(train_loader)
     model.train()
 
-    for _ in range(config.max_steps):
+    for _ in range(effective_max_steps):
         try:
             input_batch, target_batch = next(train_iter)
         except StopIteration:
@@ -268,8 +276,14 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
         final_val_loss=final_val_loss,
     )
 
+    config_record = asdict(config)
+    config_record["epochs"] = resolved_epochs
+    config_record["max_steps"] = effective_max_steps
+
     return {
-        **asdict(config),
+        **config_record,
+        "steps_per_epoch": steps_per_epoch,
+        "effective_max_steps": effective_max_steps,
         "actual_vocab_size": len(tokenizer.id_to_token),
         "train_token_count": len(train_ids),
         "val_token_count": len(val_ids),
@@ -306,6 +320,7 @@ def run_experiment_plan(plan: list[LMExperimentConfig], corpus: str, output_dir:
             _write_csv(results, results_path)
             print(
                 f"run {config.run_id:03d}: "
+                f"epochs {result['epochs']:.3f} / steps {result['max_steps']}, "
                 f"val {result['initial_val_loss']:.4f} -> {result['final_val_loss']:.4f}, "
                 f"gap {result['final_generalization_gap']:.4f}, "
                 f"{result['fit_status']}, {result['tokens_per_sec']:.1f} tok/s"
@@ -325,6 +340,31 @@ def count_parameters(model: torch.nn.Module) -> int:
         seen.add(parameter_id)
         total += parameter.numel()
     return total
+
+
+def estimate_dataset_length(token_count: int, context_length: int, stride: int | None = None) -> int:
+    """Return the number of GPT next-token windows for a token sequence."""
+    effective_stride = stride if stride is not None else context_length
+    available = token_count - context_length - 1
+    return 0 if available < 0 else available // effective_stride + 1
+
+
+def estimate_steps_per_epoch(token_count: int, context_length: int, batch_size: int, stride: int | None = None) -> int:
+    """Return DataLoader batches per epoch for the experiment's windowing setup."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    return math.ceil(estimate_dataset_length(token_count, context_length, stride) / batch_size)
+
+
+def resolve_training_length(config: LMExperimentConfig, steps_per_epoch: int) -> tuple[int, float]:
+    """Resolve epoch-based or legacy step-based training length."""
+    if steps_per_epoch <= 0:
+        raise ValueError("steps_per_epoch must be positive")
+    if config.epochs is not None:
+        epochs = float(config.epochs)
+        return max(1, math.ceil(epochs * steps_per_epoch)), epochs
+    max_steps = int(config.max_steps)
+    return max_steps, max_steps / steps_per_epoch
 
 
 def compute_overfit_metrics(initial_train_loss: float, initial_val_loss: float, final_train_loss: float, final_val_loss: float) -> dict[str, Any]:
@@ -451,12 +491,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--deterministic", action="store_true")
     parser.add_argument("--char-limit", type=int, default=20_000)
+    parser.add_argument("--epochs", type=float, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
     args = parser.parse_args(argv)
 
+    if args.epochs is not None and args.max_steps is not None:
+        parser.error("--epochs and --max-steps are mutually exclusive")
+
     plan = make_experiment_plan(total_runs=args.total_runs, seed=args.seed)
+    if args.epochs is not None:
+        plan = [replace(config, epochs=args.epochs) for config in plan]
     if args.max_steps is not None:
-        plan = [replace(config, max_steps=args.max_steps) for config in plan]
+        plan = [replace(config, epochs=None, max_steps=args.max_steps) for config in plan]
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_plan(plan, args.output_dir / "plan.csv")
