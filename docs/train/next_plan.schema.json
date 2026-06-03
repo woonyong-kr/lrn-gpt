@@ -29,7 +29,6 @@
         "grad_clip",
         "init_std",
         "learning_rate",
-        "max_steps",
         "min_frequency",
         "n_heads",
         "n_layers",
@@ -43,7 +42,7 @@
         "vocab_size",
         "weight_decay"
       ],
-      "note": "Only include small function/hyperparameter/training-condition changes. The script will preserve run_id and copy hypothesis."
+      "note": "Only include small function/hyperparameter/training-condition changes. Use epochs for training length; max_steps is recorded only as an effective update count."
     }
   }
 }

@@ -1,6 +1,6 @@
 {
-  "hypothesis": "After fixing epoch-to-step rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.",
-  "rationale": "Run111 proved the epoch option works and improved raw validation, but the rounded value 2.692308 multiplied by 39 steps_per_epoch crossed the ceiling boundary and executed 106 updates. The conversion code now subtracts a tiny epsilon before ceil, so the clean verification is to rerun the same seed202 configuration with the exact 105/39 epoch value. This isolates the requested max_steps-to-epochs migration from the rounding artifact while preserving the 413184-parameter mish Transformer, stride24, optimizer, and regularization settings.",
+  "hypothesis": "After fixing epoch-to-update rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.",
+  "rationale": "Run111 proved the epoch option works and improved raw validation, but the rounded value 2.692308 multiplied by 39 steps_per_epoch crossed the ceiling boundary and executed 106 updates. The conversion code now subtracts a tiny epsilon before ceil, so the clean verification is to rerun the same seed202 configuration with the exact 105/39 epoch value. This isolates the requested step-to-epoch migration from the rounding artifact while preserving the 413184-parameter mish Transformer, stride24, optimizer, and regularization settings.",
   "changed_variables": {
     "seed": 202,
     "epochs": 2.6923076923076925,
@@ -38,7 +38,6 @@
     "stride": 24,
     "batch_size": 8,
     "epochs": 2.6923076923076925,
-    "max_steps": 105,
     "learning_rate": 0.0003,
     "weight_decay": 0.01,
     "grad_clip": 1.0,

@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--dry-run", action="store_true", help="Initialize docs and print the next plan without training.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
     parser.add_argument("--epochs", type=float, default=None, help="Override the generated run's epoch count.")
-    parser.add_argument("--max-steps", type=int, default=None, help="Legacy override for the generated run's update count.")
+    parser.add_argument("--max-steps", type=int, default=None, help="Legacy override for compatibility; prefer --epochs for new research runs.")
     parser.add_argument("--corpus-path", type=Path, default=None)
     parser.add_argument("--char-limit", type=int, default=20_000)
     parser.add_argument("--force", action="store_true", help="Ignore a stale-looking lock and continue.")
@@ -353,8 +353,8 @@ def next_plan_schema() -> dict[str, Any]:
             "next_if_success": "Follow-up if the result generalizes.",
             "next_if_overfit": "Follow-up if overfitting appears.",
             "config_overrides": {
-                "allowed_keys": sorted(field.name for field in fields(LMExperimentConfig) if field.name not in {"run_id", "hypothesis"}),
-                "note": "Only include small function/hyperparameter/training-condition changes. The script will preserve run_id and copy hypothesis.",
+                "allowed_keys": sorted(field.name for field in fields(LMExperimentConfig) if field.name not in {"run_id", "hypothesis", "max_steps"}),
+                "note": "Only include small function/hyperparameter/training-condition changes. Use epochs for training length; max_steps is recorded only as an effective update count.",
             },
         },
     }
@@ -1303,8 +1303,8 @@ python -m src.train_loop_agent
 
 ## 결과 해석 기준
 
-- `epochs`는 사람이 지정하는 학습 길이이고, 실행 시 `steps_per_epoch`와 곱해 실제 optimizer update 수인 `max_steps`로 환산된다.
-- 과거 호환성을 위해 `max_steps`도 기록하지만, 새 실험 계획은 가능하면 `epochs`를 사용한다.
+- `epochs`는 사람이 지정하는 학습 길이이고, 실행 시 `steps_per_epoch`와 곱해 실제 optimizer update 수로 환산된다.
+- 과거 호환성을 위해 `max_steps`도 결과에 기록하지만, 새 실험 계획 입력은 `epochs`를 사용한다.
 - `final_val_loss`가 낮을수록 좋다.
 - `final_generalization_gap = final_val_loss - final_train_loss`가 커지면 과적합 위험이다.
 - `overfit_score`는 낮을수록 좋다.

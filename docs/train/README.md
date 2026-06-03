@@ -43,8 +43,8 @@ python -m src.train_loop_agent
 
 ## 결과 해석 기준
 
-- `epochs`는 사람이 지정하는 학습 길이이고, 실행 시 `steps_per_epoch`와 곱해 실제 optimizer update 수인 `max_steps`로 환산된다.
-- 과거 호환성을 위해 `max_steps`도 기록하지만, 새 실험 계획은 가능하면 `epochs`를 사용한다.
+- `epochs`는 사람이 지정하는 학습 길이이고, 실행 시 `steps_per_epoch`와 곱해 실제 optimizer update 수로 환산된다.
+- 과거 호환성을 위해 `max_steps`도 결과에 기록하지만, 새 실험 계획 입력은 `epochs`를 사용한다.
 - `final_val_loss`가 낮을수록 좋다.
 - `final_generalization_gap = final_val_loss - final_train_loss`가 커지면 과적합 위험이다.
 - `overfit_score`는 낮을수록 좋다.
