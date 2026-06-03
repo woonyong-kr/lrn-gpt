@@ -362,7 +362,7 @@ def resolve_training_length(config: LMExperimentConfig, steps_per_epoch: int) ->
         raise ValueError("steps_per_epoch must be positive")
     if config.epochs is not None:
         epochs = float(config.epochs)
-        return max(1, math.ceil(epochs * steps_per_epoch)), epochs
+        return max(1, math.ceil(epochs * steps_per_epoch - 1e-9)), epochs
     max_steps = int(config.max_steps)
     return max_steps, max_steps / steps_per_epoch
 

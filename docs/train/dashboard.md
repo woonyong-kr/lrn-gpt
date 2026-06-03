@@ -4,11 +4,11 @@
 
 ## 현재 요약
 
-- 최신 run: `110` / status=`generalizing` / risk=`low`
-- 최신 epochs: `2.692308` / effective steps=`105.0` / steps_per_epoch=`39.0`
-- 최신 final_val_loss: `5.533954`
-- 최신 generalization gap: `0.010798`
-- 최신 overfit_score: `0.045152`
+- 최신 run: `111` / status=`generalizing` / risk=`low`
+- 최신 epochs: `2.692308` / effective steps=`106.0` / steps_per_epoch=`39.0`
+- 최신 final_val_loss: `5.525291`
+- 최신 generalization gap: `0.015986`
+- 최신 overfit_score: `0.062211`
 - 현재 best 후보: run `102` / score=`5.537431` / val=`5.534507`
 
 ## 전체 추세
@@ -23,7 +23,6 @@
 
 | run | status | risk | epochs | steps | train | val | gap | overfit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 101 | generalizing | medium | 2.564103 | 100.0 | 5.514324 | 5.530441 | 0.016117 | 0.100989 |
 | 102 | generalizing | low | 2.564103 | 100.0 | 5.53504 | 5.534507 | -0.000533 | 0.011694 |
 | 103 | generalizing | low | 2.564103 | 100.0 | 5.52003 | 5.528694 | 0.008664 | 0.040245 |
 | 104 | overfit_risk | high | 2.564103 | 100.0 | 5.482966 | 5.533458 | 0.050492 | 0.216414 |
@@ -33,6 +32,7 @@
 | 108 | generalizing | low | 2.564103 | 100.0 | 5.532469 | 5.536325 | 0.003856 | 0.022365 |
 | 109 | generalizing | low | 2.692308 | 105.0 | 5.520353 | 5.533208 | 0.012854 | 0.04936 |
 | 110 | generalizing | low | 2.692308 | 105.0 | 5.523157 | 5.533954 | 0.010798 | 0.045152 |
+| 111 | generalizing | low | 2.692308 | 106.0 | 5.509305 | 5.525291 | 0.015986 | 0.062211 |
 
 ## 파일
 

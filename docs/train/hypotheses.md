@@ -1211,3 +1211,14 @@
 - 실제 결과: final_val_loss=5.53395430246989, gap=0.010797540346781709, overfit_score=0.04515214761098374, fit_status=generalizing
 - 과적합 판단: 일반화 개선 신호. final gap=0.0108, overfit_score=0.0452. seed 반복으로 재현성을 확인할 만하다.
 - 다음 가설: 성공 시 If seed151 also improves at max_steps105 without medium-risk overfit, test max_steps105 on seed202 to decide whether 105 steps should replace 100 for low-risk seeds. / 과적합 시 If seed151 overfits or loses validation at max_steps105, keep mish stride24 max_steps100 as the default and reserve stride20 only for high-gap rescue cases such as seed707.
+
+## run 111 - 2026-06-03T04:35:53+00:00
+
+- 보고서: `docs/train/runs/run_111.md`
+- 이번 가설: For the strong low-risk seed202 mish stride24 candidate, increasing the training horizon from 2.564103 epochs to 2.692308 epochs will test whether the small +0.128205 epoch refinement that helped seed808 and seed151 also transfers without pushing overfit into the medium-risk band.
+- 근거: Run103 gave the strongest raw validation among the max_steps100 lineage, which is now represented as 2.564103 epochs on this dataset: final_val_loss=5.528694, final_generalization_gap=0.008664, and overfit_score=0.040245. Runs109 and 110 showed that the 105-update horizon, now 2.692308 epochs, improved seed808 and seed151 while staying generalizing and low-risk. The highest-information follow-up is therefore an epoch-based transfer check on seed202, preserving the same 413184-parameter mish Transformer, stride24 windowing, optimizer, regularization, and hardware-light MPS runtime.
+- 바꾼 변수: `{"effective_max_steps": 105, "epochs": 2.692308, "seed": 202}`
+- 기대 결과: If the 2.692308-epoch horizon is a transferable low-risk refinement, seed202 should improve below or near run103's final_val_loss=5.528694 while keeping final_generalization_gap below 0.02 and overfit_score below 0.08. If validation stalls or overfit_score rises above 0.10, the longer epoch horizon should remain seed-specific rather than replacing the 2.564103-epoch default.
+- 실제 결과: epochs=2.692308, steps=106, final_val_loss=5.525291442871094, gap=0.01598644256591797, overfit_score=0.062210957209268614, fit_status=generalizing
+- 과적합 판단: 일반화 개선 신호. final gap=0.0160, overfit_score=0.0622. seed 반복으로 재현성을 확인할 만하다.
+- 다음 가설: 성공 시 If seed202 also improves at 2.692308 epochs while staying low-risk, promote mish stride24 at about 2.69 epochs as the candidate for low-risk seeds and validate with one fresh seed. / 과적합 시 If seed202 overfits or loses validation at 2.692308 epochs, keep 2.564103 epochs as the default and treat the longer horizon as seed-specific to 151 and 808.
