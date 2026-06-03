@@ -136,39 +136,41 @@ epoch horizon 단계, runs 101-111:
 - run 104는 fresh seed 707에서 과적합을 드러내 seed rescue 정책 필요성을 다시 확인했다.
 - run 108은 fresh seed 808이 low-risk로 통과해 seed 707이 전체 정책을 무너뜨리는 사례는 아니라고 판단했다.
 - runs 109-111은 `epochs=2.692308` 계열, 즉 105 update 상당의 작은 horizon 증가를 검증했다. seed 808, 151, 202에서 모두 low-risk generalizing을 유지했고 raw val은 개선됐다.
-- 하지만 run 111은 `2.692308 * 39`의 반올림 경계 때문에 106 effective updates가 실행됐다. 이를 막기 위해 epoch-to-update 환산에 epsilon 보정을 넣었고, 현재 대기 plan은 정확한 `105 / 39 = 2.6923076923076925 epochs`로 재검증하도록 되어 있다.
+- 하지만 run 111은 `2.692308 * 39`의 반올림 경계 때문에 106 실제 업데이트가 실행됐다. 이를 막기 위해 epoch-to-update 환산에 epsilon 보정을 넣었고, run112에서 정확한 `105 / 39 = 2.6923076923076925 epochs` 재검증을 수행했다.
+- run112는 실제 105 update로 실행됐고 `final_val_loss=5.525625`, `gap=0.014458`, `overfit_score=0.057627`, `fit_status=generalizing`을 기록했다. 따라서 2.69 epoch 계열은 raw validation을 낮추지만 overfit-aware score 기준으로는 run102의 2.56 epoch 후보가 여전히 더 안전하다.
 
 ## 6. 현재 상태
 
 | 항목 | 값 |
 | --- | --- |
-| 완료 run 수 | 111 |
-| 최신 run | 111 |
-| 최신 report | `docs/train/runs/run_111.md` |
+| 완료 run 수 | 112 |
+| 최신 run | 112 |
+| 최신 report | `docs/train/runs/run_112.md` |
 | dashboard | `docs/train/dashboard.md` |
 | trend visual | `docs/train/visuals/loss_overfit_trends.svg` |
 | latest visual | `docs/train/visuals/latest_run_metrics.svg` |
 | 현재 best | run 102 |
 | 최신 raw-val best | run 111 |
 | 활성 lock | 없음 |
-| 다음 run 번호 | 112 |
+| 다음 run 번호 | 113 |
 
 주요 후보 비교:
 
-| run | 의미 | epochs | effective updates | final_val_loss | gap | overfit_score | 판단 |
+| run | 의미 | epochs | 실제 업데이트 수 | final_val_loss | gap | overfit_score | 판단 |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | 102 | 현재 overfit-aware best | 2.564103 | 100 | 5.534507 | -0.000533 | 0.011694 | 가장 안전한 기본 후보 |
 | 103 | seed202 2.564103 epoch 검증 | 2.564103 | 100 | 5.528694 | 0.008664 | 0.040245 | raw val 강함, low-risk |
 | 108 | fresh seed808 검증 | 2.564103 | 100 | 5.536325 | 0.003856 | 0.022365 | seed707이 예외일 가능성 지지 |
 | 109 | seed808 2.692308 epoch | 2.692308 | 105 | 5.533208 | 0.012854 | 0.049360 | raw val 개선, low-risk |
 | 110 | seed151 2.692308 epoch | 2.692308 | 105 | 5.533954 | 0.010798 | 0.045152 | best seed에서도 개선 |
-| 111 | seed202 2.692308 epoch | 2.692308 | 106 | 5.525291 | 0.015986 | 0.062211 | raw val 최고, rounding artifact 포함 |
+| 111 | seed202 2.692308 epoch | 2.692308 | 106 | 5.525291 | 0.015986 | 0.062211 | raw val 최고, 반올림 artifact 포함 |
+| 112 | seed202 정확한 105 update 재검증 | 2.692307692 | 105 | 5.525625 | 0.014458 | 0.057627 | run111보다 약간 안전하지만 run102보다 과적합 비용 큼 |
 
 ## 7. 현재 연구 판단
 
 현재 연구의 가장 강한 결론은 “mish + stride24 + 413k params + 약 2.56-2.69 epochs” 계열이 가장 유망하다는 것이다. 이 계열은 수동 실험에서 보인 짧은 context 선호, 과한 capacity 확장 비효율, 강한 dropout 비효율이라는 방향성과도 맞다.
 
-아직 확정하지 않은 쟁점은 epoch horizon이다. 2.692308 epochs는 raw validation을 개선했지만 gap과 overfit_score도 조금 올라간다. overfit-aware score 기준으로는 2.564103 epochs의 run 102가 더 안전하다. 따라서 다음 검증은 새 축을 추가하는 것이 아니라, 정확한 105-update 상당 epoch 값으로 run 111의 rounding artifact를 제거하고 같은 seed202 결과를 다시 보는 것이 가장 정보량이 높다.
+아직 확정하지 않은 쟁점은 epoch horizon이다. 2.692308 epochs는 raw validation을 개선했지만 gap과 overfit_score도 조금 올라간다. run112가 반올림 artifact를 제거한 뒤에도 같은 패턴을 보였으므로, overfit-aware score 기준 기본값은 여전히 run102의 `2.564103 epochs`가 더 안전하다. 다음 검증은 새 구조를 추가하는 것이 아니라, seed만 바꾼 fresh-seed 짝비교로 2.56 epoch 기본값과 2.69 epoch 후보의 분산을 분리하는 쪽이 가장 해석 가능하다.
 
 ## 8. 앞으로의 실험 정책
 
@@ -176,9 +178,9 @@ epoch horizon 단계, runs 101-111:
 
 다음 연구 방향:
 
-1. 정확한 `epochs=2.6923076923076925`로 seed202 재검증을 수행한다.
-2. 결과가 low-risk면 2.69 epoch horizon을 low-risk seed 후보로 승격하고 fresh seed를 하나 더 본다.
-3. gap 또는 overfit_score가 상승하면 기본값은 run 102의 2.564103 epochs로 유지한다.
+1. seed만 바꾼 fresh-seed 짝비교로 2.56 epoch 기본값의 분산을 먼저 확인한다.
+2. 같은 seed set에서 2.69 epoch 후보를 대응 비교해 raw validation 개선과 과적합 비용을 분리한다.
+3. gap 또는 overfit_score가 반복적으로 상승하면 기본값은 run102의 `2.564103 epochs`로 유지한다.
 4. fresh seed에서 high-gap failure가 나오면 activation이나 capacity를 바꾸기 전에 stride20 rescue를 먼저 적용한다.
 5. 새 capacity 확장, 큰 context, 강한 dropout은 현재 증거상 우선순위가 낮다.
 

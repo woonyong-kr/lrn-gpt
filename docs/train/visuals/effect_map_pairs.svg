@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="566" viewBox="0 0 980 566" role="img">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="34.00" y="42.00" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#0f172a">짝비교 변수 효과 지도</text>
+<text x="34.00" y="68.00" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#475569">검증 손실 변화와 과적합 점수 변화를 반드시 함께 읽습니다.</text>
+<text x="280.00" y="98.00" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#334155">검증 손실 변화</text>
+<text x="610.00" y="98.00" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#334155">과적합 점수 변화</text>
+<text x="34.00" y="133.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 15-&gt;12</text>
+<line x1="415.00" y1="114" x2="415.00" y2="136" stroke="#94a3b8"/>
+<rect x="325.40" y="118" width="89.60" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="130.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.1426</text>
+<line x1="745.00" y1="114" x2="745.00" y2="136" stroke="#94a3b8"/>
+<rect x="736.96" y="118" width="8.04" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="868.00" y="130.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0111</text>
+<text x="875.00" y="133.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="165.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 24-&gt;30</text>
+<line x1="415.00" y1="146" x2="415.00" y2="168" stroke="#94a3b8"/>
+<rect x="329.68" y="150" width="85.32" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="162.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.1358</text>
+<line x1="745.00" y1="146" x2="745.00" y2="168" stroke="#94a3b8"/>
+<rect x="745.00" y="150" width="50.26" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="162.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0697</text>
+<text x="875.00" y="165.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="197.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 32-&gt;33</text>
+<line x1="415.00" y1="178" x2="415.00" y2="200" stroke="#94a3b8"/>
+<rect x="384.69" y="182" width="30.31" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="194.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0482</text>
+<line x1="745.00" y1="178" x2="745.00" y2="200" stroke="#94a3b8"/>
+<rect x="745.00" y="182" width="13.73" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="194.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0190</text>
+<text x="875.00" y="197.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="229.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 41-&gt;34</text>
+<line x1="415.00" y1="210" x2="415.00" y2="232" stroke="#94a3b8"/>
+<rect x="405.91" y="214" width="9.09" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="226.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0145</text>
+<line x1="745.00" y1="210" x2="745.00" y2="232" stroke="#94a3b8"/>
+<rect x="745.00" y="214" width="26.79" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="226.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0371</text>
+<text x="875.00" y="229.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="261.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 30-&gt;41</text>
+<line x1="415.00" y1="242" x2="415.00" y2="264" stroke="#94a3b8"/>
+<rect x="402.62" y="246" width="12.38" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="258.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0197</text>
+<line x1="745.00" y1="242" x2="745.00" y2="264" stroke="#94a3b8"/>
+<rect x="745.00" y="246" width="29.99" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="258.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0416</text>
+<text x="875.00" y="261.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="293.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 31-&gt;43</text>
+<line x1="415.00" y1="274" x2="415.00" y2="296" stroke="#94a3b8"/>
+<rect x="388.24" y="278" width="26.76" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="290.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0426</text>
+<line x1="745.00" y1="274" x2="745.00" y2="296" stroke="#94a3b8"/>
+<rect x="740.17" y="278" width="4.83" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="868.00" y="290.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0067</text>
+<text x="875.00" y="293.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="325.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 25-&gt;46</text>
+<line x1="415.00" y1="306" x2="415.00" y2="328" stroke="#94a3b8"/>
+<rect x="308.00" y="310" width="107.00" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="322.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.1703</text>
+<line x1="745.00" y1="306" x2="745.00" y2="328" stroke="#94a3b8"/>
+<rect x="745.00" y="310" width="107.00" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="322.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.1484</text>
+<text x="875.00" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="357.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 57-&gt;60</text>
+<line x1="415.00" y1="338" x2="415.00" y2="360" stroke="#94a3b8"/>
+<rect x="412.28" y="342" width="2.72" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="354.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0043</text>
+<line x1="745.00" y1="338" x2="745.00" y2="360" stroke="#94a3b8"/>
+<rect x="745.00" y="342" width="0.00" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="868.00" y="354.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0000</text>
+<text x="875.00" y="357.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="389.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 58-&gt;61</text>
+<line x1="415.00" y1="370" x2="415.00" y2="392" stroke="#94a3b8"/>
+<rect x="407.55" y="374" width="7.45" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="386.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0119</text>
+<line x1="745.00" y1="370" x2="745.00" y2="392" stroke="#94a3b8"/>
+<rect x="745.00" y="374" width="0.00" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="868.00" y="386.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0000</text>
+<text x="875.00" y="389.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="421.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 56-&gt;62</text>
+<line x1="415.00" y1="402" x2="415.00" y2="424" stroke="#94a3b8"/>
+<rect x="408.46" y="406" width="6.54" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="418.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0104</text>
+<line x1="745.00" y1="402" x2="745.00" y2="424" stroke="#94a3b8"/>
+<rect x="745.00" y="406" width="0.00" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="868.00" y="418.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0000</text>
+<text x="875.00" y="421.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="453.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 82-&gt;73</text>
+<line x1="415.00" y1="434" x2="415.00" y2="456" stroke="#94a3b8"/>
+<rect x="411.38" y="438" width="3.62" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="450.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0058</text>
+<line x1="745.00" y1="434" x2="745.00" y2="456" stroke="#94a3b8"/>
+<rect x="745.00" y="438" width="5.30" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="450.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0074</text>
+<text x="875.00" y="453.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="485.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 90-&gt;88</text>
+<line x1="415.00" y1="466" x2="415.00" y2="488" stroke="#94a3b8"/>
+<rect x="407.87" y="470" width="7.13" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="482.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0113</text>
+<line x1="745.00" y1="466" x2="745.00" y2="488" stroke="#94a3b8"/>
+<rect x="745.00" y="470" width="10.54" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="482.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0146</text>
+<text x="875.00" y="485.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="517.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 99-&gt;101</text>
+<line x1="415.00" y1="498" x2="415.00" y2="520" stroke="#94a3b8"/>
+<rect x="407.36" y="502" width="7.64" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="514.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0122</text>
+<line x1="745.00" y1="498" x2="745.00" y2="520" stroke="#94a3b8"/>
+<rect x="745.00" y="502" width="27.92" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="514.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0387</text>
+<text x="875.00" y="517.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+<text x="34.00" y="549.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">epochs 72-&gt;102</text>
+<line x1="415.00" y1="530" x2="415.00" y2="552" stroke="#94a3b8"/>
+<rect x="410.19" y="534" width="4.81" height="14" rx="3" fill="#16a34a" opacity="0.85"/>
+<text x="538.00" y="546.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.0077</text>
+<line x1="745.00" y1="530" x2="745.00" y2="552" stroke="#94a3b8"/>
+<rect x="745.00" y="534" width="8.43" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="868.00" y="546.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.0117</text>
+<text x="875.00" y="549.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">matched</text>
+</svg>

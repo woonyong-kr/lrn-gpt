@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="598" viewBox="0 0 1080 598" role="img">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="34.00" y="42.00" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#0f172a">토크나이저 / 데이터셋 상관 증거</text>
+<text x="34.00" y="68.00" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#475569">현재 값은 관찰 상관입니다. 인과 주장은 통제 반복이 필요합니다.</text>
+<text x="500.00" y="100.00" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#334155">피어슨 r</text>
+<text x="34.00" y="137.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / context_length -&gt; final_val_nats_per_char (n=20)</text>
+<line x1="650.00" y1="118" x2="650.00" y2="140" stroke="#94a3b8"/>
+<rect x="650.00" y="122" width="82.69" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="134.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.6778</text>
+<text x="815.00" y="137.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.58</text>
+<text x="34.00" y="171.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / stride -&gt; final_val_nats_per_char (n=20)</text>
+<line x1="650.00" y1="152" x2="650.00" y2="174" stroke="#94a3b8"/>
+<rect x="650.00" y="156" width="82.69" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="168.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.6778</text>
+<text x="815.00" y="171.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.58</text>
+<text x="34.00" y="205.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">auto_loop / emb_dim -&gt; final_val_nats_per_char (n=112)</text>
+<line x1="650.00" y1="186" x2="650.00" y2="208" stroke="#94a3b8"/>
+<rect x="574.26" y="190" width="75.74" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="788.00" y="202.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.6208</text>
+<text x="815.00" y="205.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=-0.16</text>
+<text x="34.00" y="239.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / actual_vocab_size -&gt; final_generalization_gap (n=20)</text>
+<line x1="650.00" y1="220" x2="650.00" y2="242" stroke="#94a3b8"/>
+<rect x="650.00" y="224" width="71.15" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="236.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5832</text>
+<text x="815.00" y="239.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="273.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / actual_vocab_size -&gt; overfit_score (n=20)</text>
+<line x1="650.00" y1="254" x2="650.00" y2="276" stroke="#94a3b8"/>
+<rect x="650.00" y="258" width="71.15" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="270.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5832</text>
+<text x="815.00" y="273.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="307.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / vocab_size -&gt; final_generalization_gap (n=20)</text>
+<line x1="650.00" y1="288" x2="650.00" y2="310" stroke="#94a3b8"/>
+<rect x="650.00" y="292" width="71.15" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="304.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5832</text>
+<text x="815.00" y="307.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="341.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / vocab_size -&gt; overfit_score (n=20)</text>
+<line x1="650.00" y1="322" x2="650.00" y2="344" stroke="#94a3b8"/>
+<rect x="650.00" y="326" width="71.15" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="338.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5832</text>
+<text x="815.00" y="341.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="375.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">auto_loop / context_length -&gt; final_val_nats_per_char (n=112)</text>
+<line x1="650.00" y1="356" x2="650.00" y2="378" stroke="#94a3b8"/>
+<rect x="650.00" y="360" width="70.26" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="372.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5759</text>
+<text x="815.00" y="375.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.59</text>
+<text x="34.00" y="409.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">auto_loop / context_length -&gt; overfit_score (n=112)</text>
+<line x1="650.00" y1="390" x2="650.00" y2="412" stroke="#94a3b8"/>
+<rect x="650.00" y="394" width="68.73" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="406.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5634</text>
+<text x="815.00" y="409.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.52</text>
+<text x="34.00" y="443.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / val_chars_per_token -&gt; final_generalization_gap (n=20)</text>
+<line x1="650.00" y1="424" x2="650.00" y2="446" stroke="#94a3b8"/>
+<rect x="650.00" y="428" width="67.51" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="440.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5534</text>
+<text x="815.00" y="443.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="477.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / val_chars_per_token -&gt; overfit_score (n=20)</text>
+<line x1="650.00" y1="458" x2="650.00" y2="480" stroke="#94a3b8"/>
+<rect x="650.00" y="462" width="67.51" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="474.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5534</text>
+<text x="815.00" y="477.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.53</text>
+<text x="34.00" y="511.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / tokens_per_sec -&gt; final_val_nats_per_char (n=20)</text>
+<line x1="650.00" y1="492" x2="650.00" y2="514" stroke="#94a3b8"/>
+<rect x="650.00" y="496" width="65.28" height="14" rx="3" fill="#dc2626" opacity="0.85"/>
+<text x="788.00" y="508.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">+0.5351</text>
+<text x="815.00" y="511.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=+0.32</text>
+<text x="34.00" y="545.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / train_token_count -&gt; final_generalization_gap (n=20)</text>
+<line x1="650.00" y1="526" x2="650.00" y2="548" stroke="#94a3b8"/>
+<rect x="585.41" y="530" width="64.59" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="788.00" y="542.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.5294</text>
+<text x="815.00" y="545.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=-0.53</text>
+<text x="34.00" y="579.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#0f172a">hy_testresult / train_token_count -&gt; overfit_score (n=20)</text>
+<line x1="650.00" y1="560" x2="650.00" y2="582" stroke="#94a3b8"/>
+<rect x="585.41" y="564" width="64.59" height="14" rx="3" fill="#64748b" opacity="0.85"/>
+<text x="788.00" y="576.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#334155">-0.5294</text>
+<text x="815.00" y="579.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">rho=-0.53</text>
+</svg>

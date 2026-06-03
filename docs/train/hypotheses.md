@@ -1215,21 +1215,21 @@
 ## run 111 - 2026-06-03T04:35:53+00:00
 
 - 보고서: `docs/train/runs/run_111.md`
-- 이번 가설: For the strong low-risk seed202 mish stride24 candidate, increasing the training horizon from 2.564103 epochs to 2.692308 epochs will test whether the small +0.128205 epoch refinement that helped seed808 and seed151 also transfers without pushing overfit into the medium-risk band.
-- 근거: Run103 gave the strongest raw validation among the max_steps100 lineage, which is now represented as 2.564103 epochs on this dataset: final_val_loss=5.528694, final_generalization_gap=0.008664, and overfit_score=0.040245. Runs109 and 110 showed that the 105-update horizon, now 2.692308 epochs, improved seed808 and seed151 while staying generalizing and low-risk. The highest-information follow-up is therefore an epoch-based transfer check on seed202, preserving the same 413184-parameter mish Transformer, stride24 windowing, optimizer, regularization, and hardware-light MPS runtime.
+- 이번 가설: low-risk인 seed202 mish stride24 후보에서 학습 길이를 `2.564103 epochs`에서 `2.692308 epochs`로 늘려, seed808과 seed151에서 보인 작은 epoch 증가 효과가 seed202에도 전이되는지 확인한다.
+- 근거: run103은 100 update 계열, 현재 데이터 기준 `2.564103 epochs`에서 가장 강한 raw validation을 보였다. run109와 run110은 105 update 상당의 `2.692308 epochs`가 seed808과 seed151에서 low-risk generalizing을 유지하면서 검증 손실을 개선함을 보여줬다. 따라서 같은 413,184 parameter mish Transformer, stride24, optimizer, regularization을 고정하고 seed202에서 epoch 기반 전이 검증을 하는 것이 정보량이 높았다.
 - 바꾼 변수: `{"effective_max_steps": 105, "epochs": 2.692308, "seed": 202}`
-- 기대 결과: If the 2.692308-epoch horizon is a transferable low-risk refinement, seed202 should improve below or near run103's final_val_loss=5.528694 while keeping final_generalization_gap below 0.02 and overfit_score below 0.08. If validation stalls or overfit_score rises above 0.10, the longer epoch horizon should remain seed-specific rather than replacing the 2.564103-epoch default.
+- 기대 결과: `2.692308 epochs`가 전이 가능한 low-risk 개선이라면 seed202에서도 run103의 `final_val_loss=5.528694` 근처 또는 그 아래로 내려가고, `final_generalization_gap < 0.02`, `overfit_score < 0.08`을 유지해야 한다. 검증 손실이 정체되거나 `overfit_score > 0.10`이면 긴 epoch horizon은 기본값이 아니라 seed-specific 후보로 둔다.
 - 실제 결과: epochs=2.692308, steps=106, final_val_loss=5.525291442871094, gap=0.01598644256591797, overfit_score=0.062210957209268614, fit_status=generalizing
 - 과적합 판단: 일반화 개선 신호. final gap=0.0160, overfit_score=0.0622. seed 반복으로 재현성을 확인할 만하다.
-- 다음 가설: 성공 시 If seed202 also improves at 2.692308 epochs while staying low-risk, promote mish stride24 at about 2.69 epochs as the candidate for low-risk seeds and validate with one fresh seed. / 과적합 시 If seed202 overfits or loses validation at 2.692308 epochs, keep 2.564103 epochs as the default and treat the longer horizon as seed-specific to 151 and 808.
+- 다음 가설: 성공 시 seed202도 `2.692308 epochs`에서 low-risk 개선을 보이면 mish stride24의 약 2.69 epoch 정책을 low-risk seed 후보로 올리고 fresh seed에서 검증한다. / 과적합 시 seed202가 과적합되거나 검증 손실을 잃으면 `2.564103 epochs`를 기본값으로 유지하고 긴 horizon은 seed151/808 전용 후보로 취급한다.
 
 ## run 112 - 2026-06-03T04:51:28+00:00
 
 - 보고서: `docs/train/runs/run_112.md`
-- 이번 가설: After fixing epoch-to-update rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.
-- 근거: Run111 proved the epoch option works and improved raw validation, but the rounded value 2.692308 multiplied by 39 steps_per_epoch crossed the ceiling boundary and executed 106 updates. The conversion code now subtracts a tiny epsilon before ceil, so the clean verification is to rerun the same seed202 configuration with the exact 105/39 epoch value. This isolates the requested step-to-epoch migration from the rounding artifact while preserving the 413184-parameter mish Transformer, stride24, optimizer, and regularization settings.
+- 이번 가설: epoch-to-update 반올림 보정 뒤 seed202 mish stride24 설정을 정확한 105 update 상당의 `2.6923076923076925 epochs`로 재검증한다.
+- 근거: run111은 epoch 옵션이 동작하고 raw validation을 낮출 수 있음을 보여줬지만, `2.692308 * 39 steps_per_epoch`가 ceil 경계에 걸려 106 update로 실행됐다. 변환 코드에 epsilon 보정이 들어갔으므로, 같은 seed202 설정을 정확한 `105/39` epoch 값으로 다시 실행해 반올림 artifact와 학습 길이 효과를 분리했다.
 - 바꾼 변수: `{"effective_updates": 105, "epochs": 2.6923076923076925, "seed": 202}`
-- 기대 결과: The clean exact-epoch run should execute 105 effective updates, stay generalizing, and land near the run103/run111 validation band while keeping final_generalization_gap below 0.02 and overfit_score below 0.08.
+- 기대 결과: 정확한 epoch 환산 run은 실제 105 update로 실행되고, `fit_status=generalizing`을 유지하며 run103/run111 근처의 검증 손실 범위에 들어와야 한다. 보호 지표는 `final_generalization_gap < 0.02`, `overfit_score < 0.08`이다.
 - 실제 결과: epochs=2.6923076923076925, steps=105, final_val_loss=5.525624593098958, gap=0.014458378156025908, overfit_score=0.05762676397959243, fit_status=generalizing
 - 과적합 판단: 일반화 개선 신호. final gap=0.0145, overfit_score=0.0576. seed 반복으로 재현성을 확인할 만하다.
-- 다음 가설: 성공 시 If the exact 105-update epoch conversion stays low-risk, use epochs as the primary training-length knob and consider a fresh-seed validation of the 2.69-epoch mish stride24 policy. / 과적합 시 If the exact 105-update epoch conversion overfits, keep the safer 2.564103-epoch baseline as the default and treat longer horizons as seed-specific.
+- 다음 가설: 성공 시 정확한 105 update 환산이 low-risk로 유지됐으므로, 앞으로 학습 길이 입력은 `epochs`를 기본 knob으로 사용하고 2.69 epoch mish stride24 정책을 fresh seed에서 검증한다. / 과적합 시 정확한 105 update 환산에서도 과적합이 커지면 더 안전한 `2.564103 epochs` 기준선을 기본값으로 유지하고 긴 horizon은 seed-specific 후보로만 취급한다.

@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="700" viewBox="0 0 980 700" role="img">
 <rect width="100%" height="100%" fill="#ffffff"/>
-<text x="36.00" y="44.00" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">mini GPT Training Metrics</text>
-<text x="36.00" y="70.00" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#475569">Loss trend and overfit signals across automation runs</text>
+<text x="36.00" y="44.00" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#0f172a">mini GPT 학습 지표</text>
+<text x="36.00" y="70.00" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#475569">자동 실험 run 전체의 loss 추세와 과적합 신호</text>
 <rect x="58" y="105" width="860" height="230" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
-<text x="76.00" y="133.00" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">Train / Validation Loss</text>
+<text x="76.00" y="133.00" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">학습 / 검증 손실</text>
 <line x1="112" y1="297" x2="877" y2="297" stroke="#94a3b8"/>
 <line x1="112" y1="153" x2="112" y2="297" stroke="#94a3b8"/>
 <line x1="112" y1="297.00" x2="877" y2="297.00" stroke="#e2e8f0"/>
@@ -130,7 +130,7 @@
 <circle cx="870.11" cy="283.59" r="4" fill="#2563eb"/>
 <circle cx="877.00" cy="283.34" r="4" fill="#2563eb"/>
 <rect x="753" y="121" width="12" height="12" fill="#2563eb"/>
-<text x="771.00" y="131.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">train</text>
+<text x="771.00" y="131.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">학습</text>
 <polyline points="112.00,162.93 118.89,249.96 125.78,248.56 132.68,251.03 139.57,251.00 146.46,248.24 153.35,251.12 160.24,251.16 167.14,251.06 174.03,250.88 180.92,251.12 187.81,249.15 194.70,248.58 201.59,224.44 208.49,230.30 215.38,251.21 222.27,251.12 229.16,251.41 236.05,251.21 242.95,251.04 249.84,255.12 256.73,253.24 263.62,251.72 270.51,255.12 277.41,255.08 284.30,254.91 291.19,251.94 298.08,245.87 304.97,253.56 311.86,273.07 318.76,272.14 325.65,271.39 332.54,277.77 339.43,277.59 346.32,277.58 353.22,274.89 360.11,276.45 367.00,276.41 373.89,276.64 380.78,277.57 387.68,275.67 394.57,276.38 401.46,277.77 408.35,277.78 415.24,277.77 422.14,277.60 429.03,277.62 435.92,276.46 442.81,276.38 449.70,277.68 456.59,277.73 463.49,277.57 470.38,276.39 477.27,276.57 484.16,276.34 491.05,277.24 497.95,277.43 504.84,277.33 511.73,271.52 518.62,278.01 525.51,278.90 532.41,278.62 539.30,278.92 546.19,278.64 553.08,278.04 559.97,279.37 566.86,278.38 573.76,279.19 580.65,279.16 587.54,279.29 594.43,278.61 601.32,279.24 608.22,279.38 615.11,278.38 622.00,279.16 628.89,279.27 635.78,278.35 642.68,278.85 649.57,279.17 656.46,279.29 663.35,278.36 670.24,278.62 677.14,279.38 684.03,279.24 690.92,276.93 697.81,277.42 704.70,278.50 711.59,278.41 718.49,277.48 725.38,276.91 732.27,277.57 739.16,278.36 746.05,278.25 752.95,279.03 759.84,278.29 766.73,278.52 773.62,278.46 780.51,277.87 787.41,279.18 794.30,279.02 801.19,280.79 808.08,280.25 814.97,281.02 821.86,280.39 828.76,278.47 835.65,279.62 842.54,279.84 849.43,280.01 856.32,280.43 863.22,280.33 870.11,281.47 877.00,281.43" fill="none" stroke="#dc2626" stroke-width="3"/>
 <circle cx="112.00" cy="162.93" r="4" fill="#dc2626"/>
 <circle cx="118.89" cy="249.96" r="4" fill="#dc2626"/>
@@ -245,7 +245,7 @@
 <circle cx="870.11" cy="281.47" r="4" fill="#dc2626"/>
 <circle cx="877.00" cy="281.43" r="4" fill="#dc2626"/>
 <rect x="753" y="141" width="12" height="12" fill="#dc2626"/>
-<text x="771.00" y="151.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">val</text>
+<text x="771.00" y="151.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">검증</text>
 <text x="104.00" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">1</text>
 <text x="110.89" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">2</text>
 <text x="117.78" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">3</text>
@@ -359,7 +359,7 @@
 <text x="862.11" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">111</text>
 <text x="869.00" y="325.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">112</text>
 <rect x="58" y="405" width="860" height="210" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
-<text x="76.00" y="433.00" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">Generalization / Overfit</text>
+<text x="76.00" y="433.00" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">일반화 / 과적합</text>
 <line x1="112" y1="577" x2="877" y2="577" stroke="#94a3b8"/>
 <line x1="112" y1="453" x2="112" y2="577" stroke="#94a3b8"/>
 <line x1="112" y1="577.00" x2="877" y2="577.00" stroke="#e2e8f0"/>
@@ -373,9 +373,9 @@
 <line x1="112" y1="453.00" x2="877" y2="453.00" stroke="#e2e8f0"/>
 <text x="64.00" y="457.00" font-family="Arial, sans-serif" font-size="10" font-weight="400" fill="#64748b">0.234</text>
 <line x1="112" y1="550.47" x2="877" y2="550.47" stroke="#ef4444" stroke-dasharray="5 5" opacity="0.6"/>
-<text x="885.00" y="554.47" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#ef4444">gap risk</text>
+<text x="885.00" y="554.47" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#ef4444">gap 위험</text>
 <line x1="112" y1="513.34" x2="877" y2="513.34" stroke="#ef4444" stroke-dasharray="5 5" opacity="0.6"/>
-<text x="885.00" y="517.34" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#ef4444">score watch</text>
+<text x="885.00" y="517.34" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#ef4444">점수 주의</text>
 <polyline points="112.00,572.67 118.89,548.72 125.78,549.55 132.68,557.78 139.57,557.80 146.46,549.32 153.35,552.08 160.24,552.10 167.14,557.80 174.03,551.75 180.92,552.08 187.81,550.99 194.70,551.09 201.59,554.16 208.49,549.01 215.38,552.50 222.27,558.19 229.16,552.47 236.05,558.29 242.95,556.98 249.84,579.10 256.73,574.28 263.62,556.88 270.51,579.10 277.41,579.05 284.30,578.59 291.19,585.32 298.08,551.49 304.97,549.33 311.86,565.70 318.76,557.96 325.65,574.85 332.54,571.48 339.43,551.78 346.32,551.80 353.22,559.55 360.11,556.28 367.00,575.22 373.89,564.16 380.78,553.27 387.68,558.35 394.57,557.34 401.46,559.15 408.35,559.23 415.24,571.50 422.14,551.78 429.03,552.18 435.92,556.52 442.81,557.34 449.70,573.10 456.59,561.01 463.49,553.27 470.38,557.34 477.27,565.48 484.16,576.24 491.05,585.53 497.95,586.70 504.84,580.47 511.73,548.47 518.62,582.21 525.51,579.69 532.41,580.10 539.30,579.55 546.19,579.98 553.08,582.06 559.97,577.17 566.86,583.12 573.76,586.82 580.65,586.69 587.54,576.67 594.43,578.79 601.32,586.52 608.22,576.82 615.11,582.96 622.00,586.94 628.89,577.26 635.78,583.44 642.68,587.69 649.57,586.93 656.46,577.22 663.35,583.39 670.24,578.68 677.14,576.82 684.03,586.52 690.92,554.54 697.81,569.79 704.70,594.82 711.59,546.34 718.49,567.24 725.38,548.93 732.27,547.92 739.16,546.97 746.05,547.44 752.95,597.72 759.84,572.23 766.73,566.17 773.62,565.13 780.51,564.76 787.41,575.30 794.30,575.96 801.19,568.45 808.08,577.28 814.97,572.40 821.86,550.21 828.76,568.46 835.65,570.17 842.54,553.72 849.43,574.95 856.32,570.18 863.22,571.27 870.11,568.52 877.00,569.33" fill="none" stroke="#d97706" stroke-width="3"/>
 <circle cx="112.00" cy="572.67" r="4" fill="#d97706"/>
 <circle cx="118.89" cy="548.72" r="4" fill="#d97706"/>
@@ -605,7 +605,7 @@
 <circle cx="870.11" cy="543.99" r="4" fill="#7c3aed"/>
 <circle cx="877.00" cy="546.43" r="4" fill="#7c3aed"/>
 <rect x="753" y="441" width="12" height="12" fill="#7c3aed"/>
-<text x="771.00" y="451.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">overfit</text>
+<text x="771.00" y="451.00" font-family="Arial, sans-serif" font-size="12" font-weight="400" fill="#334155">과적합</text>
 <text x="104.00" y="605.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">1</text>
 <text x="110.89" y="605.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">2</text>
 <text x="117.78" y="605.00" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#64748b">3</text>

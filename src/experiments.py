@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import random
@@ -27,6 +28,11 @@ except ImportError:
     from dataset import create_dataloader
     from model import GPTModel
     from train import calc_loss_batch, calc_loss_loader
+
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CORPUS_PATH = ROOT / "data" / "nsmc_lm_train.txt"
+FALLBACK_CORPUS_PATH = ROOT / "src" / "learning" / "the-verdict.txt"
 
 
 HYPOTHESES = {
@@ -229,6 +235,10 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
     tokenizer = BPETokenizer(vocab_size=config.vocab_size, min_frequency=config.min_frequency).train(train_text)
     train_ids = tokenizer.encode(train_text)
     val_ids = tokenizer.encode(val_text)
+    train_char_count = len(train_text)
+    val_char_count = len(val_text)
+    train_token_count = len(train_ids)
+    val_token_count = len(val_ids)
     _validate_split_token_ids(train_ids, val_ids, config)
 
     train_loader = create_dataloader(train_ids, context_length=config.context_length, batch_size=config.batch_size, stride=config.stride, shuffle=True, drop_last=False, seed=config.seed)
@@ -237,6 +247,7 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
         raise ValueError("Not enough tokens for train/validation loaders")
 
     model = GPTModel(config.to_model_config()).to(device)
+    parameter_count = count_parameters(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     steps_per_epoch = len(train_loader)
     effective_max_steps, resolved_epochs = resolve_training_length(config, steps_per_epoch)
@@ -245,12 +256,17 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
     initial_val_loss = calc_loss_loader(val_loader, model, device, num_batches=config.eval_batches)
 
     start_time = time.perf_counter()
+    warmup_steps = 1 if effective_max_steps > 1 else 0
+    warmup_excluded_start_time = start_time if warmup_steps == 0 else None
+    warmup_excluded_tokens = 0
     tokens_seen = 0
     last_loss = 0.0
     train_iter = iter(train_loader)
     model.train()
 
-    for _ in range(effective_max_steps):
+    for step_index in range(effective_max_steps):
+        if step_index == warmup_steps:
+            warmup_excluded_start_time = time.perf_counter()
         try:
             input_batch, target_batch = next(train_iter)
         except StopIteration:
@@ -264,9 +280,13 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(config.grad_clip))
         optimizer.step()
         last_loss = float(loss.item())
-        tokens_seen += int(input_batch.numel())
+        batch_token_count = int(input_batch.numel())
+        tokens_seen += batch_token_count
+        if step_index >= warmup_steps:
+            warmup_excluded_tokens += batch_token_count
 
     elapsed_sec = time.perf_counter() - start_time
+    warmup_excluded_elapsed_sec = 0.0 if warmup_excluded_start_time is None else time.perf_counter() - warmup_excluded_start_time
     final_train_loss = calc_loss_loader(train_loader, model, device, num_batches=config.eval_batches)
     final_val_loss = calc_loss_loader(val_loader, model, device, num_batches=config.eval_batches)
     overfit_metrics = compute_overfit_metrics(
@@ -279,26 +299,57 @@ def run_language_model_experiment(config: LMExperimentConfig, corpus: str, devic
     config_record = asdict(config)
     config_record["epochs"] = resolved_epochs
     config_record["max_steps"] = effective_max_steps
+    train_tokens_per_char = safe_ratio(train_token_count, train_char_count)
+    val_tokens_per_char = safe_ratio(val_token_count, val_char_count)
+    train_chars_per_token = safe_ratio(train_char_count, train_token_count)
+    val_chars_per_token = safe_ratio(val_char_count, val_token_count)
+    observed_best_val_loss = min(initial_val_loss, final_val_loss)
+    compute_proxy_param_tokens = parameter_count * tokens_seen
 
     return {
         **config_record,
+        "corpus_char_count": len(corpus),
+        "corpus_sha256": hashlib.sha256(corpus.encode("utf-8")).hexdigest()[:12],
         "steps_per_epoch": steps_per_epoch,
         "effective_max_steps": effective_max_steps,
         "actual_vocab_size": len(tokenizer.id_to_token),
-        "train_token_count": len(train_ids),
-        "val_token_count": len(val_ids),
-        "parameter_count": count_parameters(model),
+        "bpe_merge_count": len(tokenizer.merges),
+        "train_char_count": train_char_count,
+        "val_char_count": val_char_count,
+        "train_token_count": train_token_count,
+        "val_token_count": val_token_count,
+        "train_tokens_per_char": train_tokens_per_char,
+        "val_tokens_per_char": val_tokens_per_char,
+        "train_chars_per_token": train_chars_per_token,
+        "val_chars_per_token": val_chars_per_token,
+        "parameter_count": parameter_count,
         "initial_train_loss": initial_train_loss,
         "initial_val_loss": initial_val_loss,
         "last_step_loss": last_loss,
         "final_train_loss": final_train_loss,
         "final_val_loss": final_val_loss,
+        "final_train_perplexity": safe_exp(final_train_loss),
+        "final_val_perplexity": safe_exp(final_val_loss),
+        "observed_best_val_loss": observed_best_val_loss,
+        "final_minus_observed_best_val_loss": final_val_loss - observed_best_val_loss,
+        "final_train_nats_per_char": final_train_loss * train_tokens_per_char,
+        "final_val_nats_per_char": final_val_loss * val_tokens_per_char,
+        "final_train_bits_per_char": final_train_loss * train_tokens_per_char / math.log(2),
+        "final_val_bits_per_char": final_val_loss * val_tokens_per_char / math.log(2),
+        "estimated_chars_seen": tokens_seen * train_chars_per_token,
+        "compute_proxy_param_tokens": compute_proxy_param_tokens,
+        "estimated_train_flops": 6 * compute_proxy_param_tokens,
+        "tokens_per_parameter": safe_ratio(tokens_seen, parameter_count),
         "train_loss_delta": initial_train_loss - final_train_loss,
         "val_loss_delta": initial_val_loss - final_val_loss,
         **overfit_metrics,
         "elapsed_sec": elapsed_sec,
         "tokens_seen": tokens_seen,
         "tokens_per_sec": 0.0 if elapsed_sec == 0 else tokens_seen / elapsed_sec,
+        "warmup_steps": warmup_steps,
+        "warmup_excluded_elapsed_sec": warmup_excluded_elapsed_sec,
+        "warmup_excluded_tokens": warmup_excluded_tokens,
+        "warmup_excluded_tokens_per_sec": 0.0 if warmup_excluded_elapsed_sec == 0 else warmup_excluded_tokens / warmup_excluded_elapsed_sec,
         "device": str(device),
     }
 
@@ -340,6 +391,19 @@ def count_parameters(model: torch.nn.Module) -> int:
         seen.add(parameter_id)
         total += parameter.numel()
     return total
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    """Return numerator / denominator while keeping metric generation robust."""
+    return 0.0 if denominator == 0 else numerator / denominator
+
+
+def safe_exp(value: float) -> float:
+    """Return exp(value) without breaking metric generation on overflow."""
+    try:
+        return math.exp(value)
+    except OverflowError:
+        return float("inf")
 
 
 def estimate_dataset_length(token_count: int, context_length: int, stride: int | None = None) -> int:
@@ -485,7 +549,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run reproducible mini GPT hyperparameter experiments.")
     parser.add_argument("--total-runs", type=int, default=150)
     parser.add_argument("--seed", type=int, default=123)
-    parser.add_argument("--corpus-path", type=Path, default=Path(__file__).resolve().parent / "learning" / "the-verdict.txt")
+    parser.add_argument("--corpus-path", type=Path, default=DEFAULT_CORPUS_PATH if DEFAULT_CORPUS_PATH.exists() else FALLBACK_CORPUS_PATH)
     parser.add_argument("--output-dir", type=Path, default=Path("experiments") / "lm_hparam")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
     parser.add_argument("--plan-only", action="store_true")

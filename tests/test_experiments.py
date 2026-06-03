@@ -124,12 +124,30 @@ def test_experiment_result_contains_required_metrics():
         "epochs",
         "steps_per_epoch",
         "max_steps",
+        "actual_vocab_size",
+        "bpe_merge_count",
+        "corpus_char_count",
+        "corpus_sha256",
+        "train_char_count",
+        "val_char_count",
+        "train_token_count",
+        "val_token_count",
+        "train_tokens_per_char",
+        "val_tokens_per_char",
+        "train_chars_per_token",
+        "val_chars_per_token",
+        "final_train_nats_per_char",
+        "final_val_nats_per_char",
+        "final_train_bits_per_char",
+        "final_val_bits_per_char",
         "parameter_count",
         "tokens_per_sec",
         "elapsed_sec",
         "device",
     ]:
         assert key in result
+    assert result["val_tokens_per_char"] > 0
+    assert result["final_val_nats_per_char"] > 0
 
 
 def test_epoch_option_resolves_to_loader_length():
@@ -206,10 +224,127 @@ def test_train_loop_visual_summary_and_svgs_include_metrics():
     latest_svg = render_latest_run_svg({**rows[0], "initial_train_loss": 5.5, "initial_val_loss": 5.6})
 
     assert summary[0]["risk_level"] == "high"
-    assert "Train / Validation Loss" in trend_svg
-    assert "Generalization / Overfit" in trend_svg
-    assert "Loss Snapshot" in latest_svg
-    assert "Overfit Signals" in latest_svg
+    assert "학습 / 검증 손실" in trend_svg
+    assert "일반화 / 과적합" in trend_svg
+    assert "손실 요약" in latest_svg
+    assert "과적합 신호" in latest_svg
+
+
+def test_train_loop_effect_map_requires_loss_and_overfit_deltas():
+    """해석 지도는 loss 개선과 과적합 비용을 함께 보여줘야 한다."""
+    from train_loop_agent import derive_matched_effects, render_effect_map_svg
+
+    base_config = {
+        "seed": 42,
+        "vocab_size": 600,
+        "context_length": 48,
+        "stride": 24,
+        "batch_size": 8,
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "grad_clip": 1.0,
+        "emb_dim": 96,
+        "n_heads": 4,
+        "n_layers": 3,
+        "drop_rate": 0.1,
+        "qkv_bias": False,
+        "ffn_mult": 4.0,
+        "norm_first": True,
+        "norm_eps": 1e-5,
+        "activation_name": "gelu",
+        "ffn_dropout_position": "post_activation",
+        "attention_impl": "sdpa",
+        "tie_embeddings": True,
+        "init_std": 0.02,
+    }
+    rows = [
+        {
+            **base_config,
+            "run_id": 1,
+            "epochs": 2.5,
+            "max_steps": 100,
+            "steps_per_epoch": 40,
+            "final_val_loss": 5.4,
+            "final_generalization_gap": 0.01,
+            "overfit_score": 0.05,
+            "final_val_nats_per_char": 3.2,
+        },
+        {
+            **base_config,
+            "run_id": 2,
+            "epochs": 2.75,
+            "max_steps": 110,
+            "steps_per_epoch": 40,
+            "final_val_loss": 5.3,
+            "final_generalization_gap": 0.03,
+            "overfit_score": 0.08,
+            "final_val_nats_per_char": 3.14,
+        },
+    ]
+
+    effects = derive_matched_effects(rows)
+    svg = render_effect_map_svg(effects)
+
+    assert effects[0]["axis"] == "epochs"
+    assert effects[0]["delta_val_loss"] == -0.1
+    assert effects[0]["delta_overfit"] == 0.03
+    assert "검증 손실 변화" in svg
+    assert "과적합 점수 변화" in svg
+
+
+def test_train_loop_correlation_report_keeps_tokenizer_and_overfit_outcomes():
+    """BPE/tokenizer 상관은 char-normalized loss와 과적합 outcome을 함께 계산한다."""
+    from train_loop_agent import build_correlation_records, compute_correlation_results, render_correlation_svg
+
+    rows = [
+        {
+            "run_id": 1,
+            "scope": "auto_loop",
+            "vocab_size": 400,
+            "actual_vocab_size": 400,
+            "val_tokens_per_char": 0.5,
+            "val_chars_per_token": 2.0,
+            "final_val_loss": 5.8,
+            "final_val_nats_per_char": 2.9,
+            "final_generalization_gap": 0.01,
+            "overfit_score": 0.03,
+            "corpus_sha256": "same",
+        },
+        {
+            "run_id": 2,
+            "scope": "auto_loop",
+            "vocab_size": 600,
+            "actual_vocab_size": 600,
+            "val_tokens_per_char": 0.4,
+            "val_chars_per_token": 2.5,
+            "final_val_loss": 5.5,
+            "final_val_nats_per_char": 2.2,
+            "final_generalization_gap": 0.02,
+            "overfit_score": 0.05,
+            "corpus_sha256": "same",
+        },
+        {
+            "run_id": 3,
+            "scope": "auto_loop",
+            "vocab_size": 800,
+            "actual_vocab_size": 800,
+            "val_tokens_per_char": 0.3,
+            "val_chars_per_token": 3.333,
+            "final_val_loss": 5.3,
+            "final_val_nats_per_char": 1.59,
+            "final_generalization_gap": 0.04,
+            "overfit_score": 0.08,
+            "corpus_sha256": "same",
+        },
+    ]
+
+    correlation_rows = build_correlation_records(rows, [])
+    correlations = compute_correlation_results(correlation_rows)
+    svg = render_correlation_svg(correlations)
+
+    assert any(item["feature"] == "vocab_size" and item["outcome"] == "final_val_nats_per_char" for item in correlations)
+    assert any(item["outcome"] == "overfit_score" for item in correlations)
+    assert "상관 증거" in svg
 
 
 def test_split_corpus_text_keeps_validation_out_of_tokenizer_training():

@@ -5,6 +5,8 @@ data/nsmc_lm_*.txt
 data/nsmc_sentiment_*.jsonl
 data/vocab_*.json
 data/*.jsonl
+data/obsidian_*.txt
+data/obsidian_*.json
 src/learning/the-verdict.txt
 
 # Python

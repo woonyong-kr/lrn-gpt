@@ -45,7 +45,7 @@
 | `train_model`은 epoch train loss 중심이라 150회 실험 기록에는 부족 | run별 val loss, 속도, 파라미터 수 비교가 어려움 | 별도 `src/experiments.py` 실행기 추가 |
 | BPE를 전체 corpus에서 학습하면 validation 분포가 merge rule에 섞일 수 있음 | validation loss가 실제보다 조금 덜 엄격해질 수 있음 | raw text를 먼저 train/validation으로 나눈 뒤 train text로만 BPE 학습 |
 | 20 step smoke run만으로는 과적합 판단이 약함 | 용량이 큰 모델이 아직 외우기 전이라 gap이 작게 보일 수 있음 | 150회 탐색 후 상위 후보는 더 긴 step과 seed 반복으로 재검증 |
-| full NSMC data가 repo에 없음 | 실제 한국어 결과를 보려면 데이터 준비 필요 | 기본 smoke corpus는 `src/learning/the-verdict.txt`, 실제 실험 전 `python download_data.py` 권장 |
+| NSMC data가 없는 새 환경에서는 자동 실험이 영어 샘플로 fallback될 수 있음 | 한국어 중심 결과를 보려면 NSMC 파일 존재 여부 확인 필요 | 기본 smoke corpus를 `data/nsmc_lm_train.txt`로 두고, 없으면 `src/learning/the-verdict.txt`로 fallback |
 
 ## 4. 150회 실험 서순
 

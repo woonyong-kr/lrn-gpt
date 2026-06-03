@@ -3,3 +3,4 @@ numpy>=1.24
 matplotlib>=3.7
 pytest>=7.0
 tiktoken==0.9.0
+tokenizers==0.20.3

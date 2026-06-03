@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "completed",
+  "status": "idle",
   "current_run": 112,
   "next_run": 113,
   "running_pid": null,
@@ -48,9 +48,9 @@
     "device": "mps",
     "artifact_dir": "docs/train/runs/run_102_artifacts"
   },
-  "last_updated": "2026-06-03T04:51:28+00:00",
+  "last_updated": "2026-06-03T07:45:57+00:00",
   "hardware": {
-    "timestamp": "2026-06-03T04:51:21+00:00",
+    "timestamp": "2026-06-03T07:45:57+00:00",
     "hostname": "woonyong-MacBookPro.local",
     "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
     "machine": "arm64",
@@ -66,7 +66,7 @@
   },
   "dry_run_next_hypothesis": "안정성 검증: 좋아 보이는 설정을 seed만 바꿔 재현 가능한 개선인지 확인한다.",
   "dry_run_next_config": {
-    "run_id": 111,
+    "run_id": 113,
     "hypothesis": "안정성 검증: 좋아 보이는 설정을 seed만 바꿔 재현 가능한 개선인지 확인한다.",
     "seed": 252,
     "vocab_size": 600,
@@ -75,7 +75,6 @@
     "stride": 24,
     "batch_size": 8,
     "epochs": 2.564103,
-    "max_steps": 100,
     "eval_batches": 4,
     "train_ratio": 0.9,
     "learning_rate": 0.0003,
@@ -95,7 +94,7 @@
     "tie_embeddings": true,
     "init_std": 0.02
   },
-  "current_hypothesis": "After fixing epoch-to-update rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.",
+  "current_hypothesis": "epoch-to-update 반올림 보정 뒤 seed202 mish stride24 설정을 정확한 105 update 상당의 2.6923076923076925 epochs로 재검증한다.",
   "lock_info": null,
   "last_result": {
     "epochs": 2.6923076923076925,
