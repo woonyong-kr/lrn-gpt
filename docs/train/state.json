@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "status": "completed",
-  "current_run": 111,
-  "next_run": 112,
+  "current_run": 112,
+  "next_run": 113,
   "running_pid": null,
   "lock_path": "docs/train/.train_loop.lock",
-  "last_experiment_dir": "docs/train/runs/run_111_artifacts",
+  "last_experiment_dir": "docs/train/runs/run_112_artifacts",
   "best_run": {
     "run_id": "102",
     "timestamp": "2026-06-03T03:39:22+00:00",
@@ -48,9 +48,9 @@
     "device": "mps",
     "artifact_dir": "docs/train/runs/run_102_artifacts"
   },
-  "last_updated": "2026-06-03T04:35:53+00:00",
+  "last_updated": "2026-06-03T04:51:28+00:00",
   "hardware": {
-    "timestamp": "2026-06-03T04:35:49+00:00",
+    "timestamp": "2026-06-03T04:51:21+00:00",
     "hostname": "woonyong-MacBookPro.local",
     "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
     "machine": "arm64",
@@ -95,24 +95,24 @@
     "tie_embeddings": true,
     "init_std": 0.02
   },
-  "current_hypothesis": "For the strong low-risk seed202 mish stride24 candidate, increasing the training horizon from 2.564103 epochs to 2.692308 epochs will test whether the small +0.128205 epoch refinement that helped seed808 and seed151 also transfers without pushing overfit into the medium-risk band.",
+  "current_hypothesis": "After fixing epoch-to-update rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.",
   "lock_info": null,
   "last_result": {
-    "epochs": 2.692308,
+    "epochs": 2.6923076923076925,
     "steps_per_epoch": 39,
-    "max_steps": 106,
-    "final_train_loss": 5.509305000305176,
-    "final_val_loss": 5.525291442871094,
-    "final_generalization_gap": 0.01598644256591797,
-    "overfit_score": 0.062210957209268614,
+    "max_steps": 105,
+    "final_train_loss": 5.511166214942932,
+    "final_val_loss": 5.525624593098958,
+    "final_generalization_gap": 0.014458378156025908,
+    "overfit_score": 0.05762676397959243,
     "fit_status": "generalizing",
     "parameter_count": 413184,
-    "tokens_per_sec": 34145.4127903661,
+    "tokens_per_sec": 15033.866047360689,
     "device": "mps"
   },
-  "last_report": "docs/train/runs/run_111.md",
+  "last_report": "docs/train/runs/run_112.md",
   "dry_run_plan_source": "rule_based",
   "current_plan_source": "llm_plan:docs/train/next_plan.json",
   "dashboard_path": "docs/train/dashboard.md",
-  "latest_visualization": "docs/train/runs/run_111_artifacts/run_metrics.svg"
+  "latest_visualization": "docs/train/runs/run_112_artifacts/run_metrics.svg"
 }

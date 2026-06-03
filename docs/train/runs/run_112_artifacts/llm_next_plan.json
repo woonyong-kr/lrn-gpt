@@ -4,7 +4,7 @@
   "changed_variables": {
     "seed": 202,
     "epochs": 2.6923076923076925,
-    "effective_max_steps": 105
+    "effective_updates": 105
   },
   "fixed_variables": [
     "vocab_size",

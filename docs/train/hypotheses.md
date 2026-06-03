@@ -1222,3 +1222,14 @@
 - 실제 결과: epochs=2.692308, steps=106, final_val_loss=5.525291442871094, gap=0.01598644256591797, overfit_score=0.062210957209268614, fit_status=generalizing
 - 과적합 판단: 일반화 개선 신호. final gap=0.0160, overfit_score=0.0622. seed 반복으로 재현성을 확인할 만하다.
 - 다음 가설: 성공 시 If seed202 also improves at 2.692308 epochs while staying low-risk, promote mish stride24 at about 2.69 epochs as the candidate for low-risk seeds and validate with one fresh seed. / 과적합 시 If seed202 overfits or loses validation at 2.692308 epochs, keep 2.564103 epochs as the default and treat the longer horizon as seed-specific to 151 and 808.
+
+## run 112 - 2026-06-03T04:51:28+00:00
+
+- 보고서: `docs/train/runs/run_112.md`
+- 이번 가설: After fixing epoch-to-update rounding, rerun the seed202 mish stride24 horizon as an exact epoch conversion of the former 105-update experiment: 105 / 39 = 2.6923076923076925 epochs.
+- 근거: Run111 proved the epoch option works and improved raw validation, but the rounded value 2.692308 multiplied by 39 steps_per_epoch crossed the ceiling boundary and executed 106 updates. The conversion code now subtracts a tiny epsilon before ceil, so the clean verification is to rerun the same seed202 configuration with the exact 105/39 epoch value. This isolates the requested step-to-epoch migration from the rounding artifact while preserving the 413184-parameter mish Transformer, stride24, optimizer, and regularization settings.
+- 바꾼 변수: `{"effective_updates": 105, "epochs": 2.6923076923076925, "seed": 202}`
+- 기대 결과: The clean exact-epoch run should execute 105 effective updates, stay generalizing, and land near the run103/run111 validation band while keeping final_generalization_gap below 0.02 and overfit_score below 0.08.
+- 실제 결과: epochs=2.6923076923076925, steps=105, final_val_loss=5.525624593098958, gap=0.014458378156025908, overfit_score=0.05762676397959243, fit_status=generalizing
+- 과적합 판단: 일반화 개선 신호. final gap=0.0145, overfit_score=0.0576. seed 반복으로 재현성을 확인할 만하다.
+- 다음 가설: 성공 시 If the exact 105-update epoch conversion stays low-risk, use epochs as the primary training-length knob and consider a fresh-seed validation of the 2.69-epoch mish stride24 policy. / 과적합 시 If the exact 105-update epoch conversion overfits, keep the safer 2.564103-epoch baseline as the default and treat longer horizons as seed-specific.
