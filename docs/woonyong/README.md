@@ -15,6 +15,9 @@
 | 6 | [06-byte-pair-encoding.md](06-byte-pair-encoding.md) | BPE는 언제 세고 언제 병합하는가 |
 | 7 | [07-project-completion-roadmap.md](07-project-completion-roadmap.md) | 프로젝트를 완성하려면 무엇을 구현해야 하는가 |
 | 8 | [08-attention-mechanisms.md](08-attention-mechanisms.md) | self-attention, causal attention, multi-head attention은 무엇이 다른가 |
+| 9 | [09-gpt-block-implementation-and-experiments.md](09-gpt-block-implementation-and-experiments.md) | GPT block 구현과 실험 결과는 어떻게 연결되는가 |
+| 10 | [10-hyperparameter-experiment-plan.md](10-hyperparameter-experiment-plan.md) | 하이퍼파라미터 실험은 어떤 순서로 검증하는가 |
+| 11 | [11-hangul-aware-bpe-report.md](11-hangul-aware-bpe-report.md) | 한글 인식 BPE는 왜 필요한가 |
 
 ## 중복을 줄이는 기준
 
@@ -27,6 +30,7 @@
 - 유해 콘텐츠 감지는 BERT 구조를 다시 설명하지 않고, 분류 파이프라인과 운영상 주의점에 집중한다.
 - 제로샷과 퓨샷은 모델 구조보다 "학습 여부와 예시 제공 방식"에 초점을 둔다.
 - BPE tokenizer의 학습 단계, merge rule, vocab size, `<|unk|>` 차이는 `06-byte-pair-encoding.md`에서 정리한다.
+- 한글 byte 보호, rare merge 제한, tokenizer와 과적합의 관계는 `11-hangul-aware-bpe-report.md`에서 정리한다.
 - 구현 순서, 테스트 현황, 나중에 추가될 메모의 병합 위치는 `07-project-completion-roadmap.md`에서 관리한다.
 
 ## 공부할 때 붙잡을 큰 그림
