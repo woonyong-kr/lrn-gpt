@@ -1,0 +1,32 @@
+{
+  "all_results_jsonl": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/nsmc_bestfit/all_run_results.jsonl",
+  "all_results_ledger_rows": 1,
+  "claim_ready_conditions": 0,
+  "completed_physical_run_numbers": [
+    1
+  ],
+  "completed_physical_runs": 1,
+  "completed_results_without_matrix": [],
+  "completed_runs": 1,
+  "duplicate_completed_run_numbers": [],
+  "ledger_matches_completed_physical_runs": true,
+  "matrix_result_mismatch_count": 0,
+  "matrix_result_mismatches": [],
+  "non_completed_result_files": 0,
+  "pending_physical_run_numbers": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "pending_physical_runs": 4,
+  "planned_analysis_rows": 5,
+  "planned_conditions": 5,
+  "planned_physical_runs": 5,
+  "planned_runs": 5,
+  "result_file_count": 1,
+  "result_ledger_status": "PASS",
+  "result_load_error_count": 0,
+  "result_load_errors": [],
+  "screen_ready_conditions": 1
+}
