@@ -29,6 +29,8 @@ LOG2_E = math.log(2)
 
 def configure_matplotlib_font() -> None:
     for font_path in [
+        Path("C:/Windows/Fonts/malgun.ttf"),
+        Path("C:/Windows/Fonts/malgunbd.ttf"),
         Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
         Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
         Path("/Library/Fonts/AppleGothic.ttf"),

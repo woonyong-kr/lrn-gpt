@@ -427,9 +427,79 @@ qkv_bias=True : Q = xW + b
 
 ### 6.3 BPE 병합 조건 조정: MF50 vocab
 
-다음으로는 vocab 크기뿐 아니라 BPE 병합 조건도 조절했다. 한글은 UTF-8에서 보통 한 글자가 3바이트로 표현된다. 따라서 1~2바이트 조각은 한글 한 글자를 구성하기 위한 중간 byte 조각일 가능성이 높다.
+다음으로는 vocab 크기뿐 아니라 BPE 병합 조건도 조절했다. 한글은 UTF-8에서 보통 한 글자가 3바이트로 표현된다.
 
-이런 짧은 조각까지 `min_frequency`로 강하게 제한하면 한글 글자 자체를 구성하는 기본 결합이 충분히 만들어지지 않을 수 있다. 반대로 3바이트 이상 조각은 한 글자 또는 여러 글자 단위의 의미 있는 병합일 가능성이 크다. 그래서 3바이트 미만 pair는 빈도와 상관없이 병합을 허용하고, 3바이트 이상 pair에만 `min_frequency=50`을 적용하는 방식으로 전환했다.
+예를 들어 `한`은 UTF-8 byte 3개로 표현된다.
+
+```text
+한 ~= ED 95 9C
+```
+
+그래서 1~2바이트 pair는 한글 한 글자를 구성하기 위한 중간 조각일 가능성이 높다. 이런 조각까지 강하게 제한하면, 한글 글자 자체를 구성하는 기본 결합이 충분히 만들어지지 않을 수 있다.
+
+반대로 3바이트 이상 pair는 한 글자 또는 여러 글자 단위의 조각일 가능성이 커진다. 이 단계부터는 빈도가 낮은 merge를 제한하는 것이 과적합 완화에 도움이 될 수 있다.
+
+```mermaid
+flowchart TB
+    DATA["DATA<br/>NSMC review text corpus"] --> STREAM["UTF-8 byte stream"]
+
+    STREAM --> H1
+    STREAM --> H2
+    STREAM --> H3
+    STREAM --> G1
+    STREAM --> G2
+    STREAM --> G3
+
+    subgraph HAN["예: 한"]
+        H1(("1 byte<br/>ED"))
+        H2(("1 byte<br/>95"))
+        H3(("1 byte<br/>9C"))
+        HC["3 bytes<br/>한"]
+        H1 --> HC
+        H2 --> HC
+        H3 --> HC
+    end
+
+    subgraph GEUL["예: 글"]
+        G1(("1 byte<br/>EA"))
+        G2(("1 byte<br/>B8"))
+        G3(("1 byte<br/>80"))
+        GC["3 bytes<br/>글"]
+        G1 --> GC
+        G2 --> GC
+        G3 --> GC
+    end
+
+    HC --> PAIR["BPE pair candidate"]
+    GC --> PAIR
+    PAIR --> CHECK{"pair byte length"}
+
+    CHECK -->|"< 3 bytes"| BASIC["Allow merge<br/>basic byte composition"]
+    CHECK -->|">= 3 bytes"| GATE["frequency gate<br/>apply min_frequency"]
+
+    GATE -->|"frequent enough"| MERGE["merge into vocab"]
+    GATE -->|"too rare"| SKIP["skip merge"]
+    BASIC --> VOCAB["actual vocab"]
+    MERGE --> VOCAB
+
+    classDef byte fill:#e8f1ff,stroke:#2f6fbd,stroke-width:2px,color:#102a43;
+    classDef char fill:#fff7d6,stroke:#c28a00,stroke-width:2px,color:#3b2f00;
+    classDef gate fill:#ffe8e8,stroke:#c43b3b,stroke-width:2px,color:#3b0808;
+    classDef result fill:#e9f8ec,stroke:#2f8f4e,stroke-width:2px,color:#0b3318;
+    class H1,H2,H3,G1,G2,G3 byte;
+    class HC,GC char;
+    class GATE,CHECK gate;
+    class BASIC,MERGE,VOCAB result;
+```
+
+그래서 3바이트 미만 pair는 빈도와 상관없이 병합을 허용하고, 3바이트 이상 pair에만 `min_frequency=50`을 적용하는 방식으로 전환했다.
+
+| pair 후보 | byte 길이 기준 | 병합 규칙 | 이유 | 기대 효과 |
+| --- | --- | --- | --- | --- |
+| 한글 글자 내부 byte 조각 | `< 3 bytes` | `min_frequency` 제한 없이 병합 후보로 허용 | 한글 한 글자는 UTF-8에서 보통 3바이트이므로, 1~2바이트 pair는 글자 구성 중간 단계일 가능성이 높다. | 한글 글자 자체가 byte 단위로 과도하게 쪼개지는 것을 줄인다. |
+| 한 글자 이상 의미 조각 | `>= 3 bytes` | `min_frequency` 기준 적용 | 3바이트 이상부터는 한글 한 글자 또는 여러 글자 표현이므로, 드문 표현까지 무조건 vocab에 넣으면 희귀 token이 늘 수 있다. | 자주 등장하는 한국어 chunk는 살리고, 희귀한 긴 merge는 제한한다. |
+| 빈도 높은 긴 조각 | `>= 3 bytes`이고 빈도 기준 통과 | vocab에 merge token으로 추가 | 반복적으로 등장하는 표현은 문장을 덜 잘게 쪼개는 데 도움이 된다. | 의미 있는 다글자 token을 확보한다. |
+| 빈도 낮은 긴 조각 | `>= 3 bytes`이고 빈도 기준 미달 | 병합하지 않고 작은 조각으로 유지 | train set에만 드물게 등장한 긴 표현은 외우기 쉬운 token이 될 수 있다. | 과적합 위험이 큰 희귀 token 증가를 막는다. |
 
 이 목적은 한글 문자 구성에 필요한 기본 byte 결합은 살리면서, 데이터에 적게 등장하는 긴 표현이 vocab에 과하게 들어가는 것을 막는 것이다. 결과적으로 목표 vocab을 억지로 끝까지 채우지 않고 actual vocab 2328에서 멈추는 MF50 vocab이 만들어졌다.
 
