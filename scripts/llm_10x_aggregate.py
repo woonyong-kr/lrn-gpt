@@ -8,6 +8,7 @@ import argparse
 from collections import defaultdict
 import csv
 from collections import Counter
+import json
 import math
 from pathlib import Path
 import random
@@ -24,16 +25,30 @@ DEFAULT_META = DOCS_DIR / "aggregate_meta.json"
 DEFAULT_ALL_RESULTS_JSONL = DOCS_DIR / "all_run_results.jsonl"
 METRICS = (
     "final_val_bits_per_char",
+    "final_val_nats_per_char",
     "final_val_loss",
+    "best_val_bits_per_char",
+    "best_val_nats_per_char",
     "best_val_loss",
+    "final_minus_best_val_loss",
     "final_generalization_gap",
     "generalization_gap_delta",
     "train_val_improvement_gap",
     "overfit_score",
+    "tokens_seen",
+    "estimated_chars_seen",
+    "parameter_count",
+    "tokens_per_param",
+    "compute_proxy",
+    "estimated_train_flops",
     "elapsed_sec",
     "seconds_per_epoch",
     "tokens_per_sec",
+    "tokens_per_sec_after_warmup",
 )
+LN2 = math.log(2.0)
+TRAINING_FLOPS_FACTOR = 6
+HIGHER_IS_BETTER = {"tokens_per_sec", "tokens_per_sec_after_warmup"}
 BASELINES = {
     "phase1_lr": "LR0300",
     "phase2_epoch": "E0025",
@@ -102,6 +117,71 @@ def load_results(runs_dir: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "result_load_errors": load_errors,
         "non_completed_result_files": non_completed_result_files,
     }
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return 0.0 if denominator == 0 else numerator / denominator
+
+
+def to_float(value: Any, default: float = 0.0) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def token_scale_from_result(row: dict[str, Any], split: str) -> tuple[float, float]:
+    manifest = row.get("cache_vocab_manifest", {}) if isinstance(row.get("cache_vocab_manifest"), dict) else {}
+    tokens_per_char = to_float(row.get(f"{split}_tokens_per_char"), default=0.0)
+    chars_per_token = to_float(row.get(f"{split}_chars_per_token"), default=0.0)
+    if tokens_per_char == 0.0:
+        tokens_per_char = to_float(manifest.get(f"{split}_tokens_per_char"), default=0.0)
+    if chars_per_token == 0.0:
+        chars_per_token = to_float(manifest.get(f"{split}_chars_per_token"), default=0.0)
+    tokens = to_float(manifest.get(f"{split}_tokens"), default=0.0)
+    chars = to_float(manifest.get(f"{split}_chars"), default=0.0)
+    if tokens_per_char == 0.0:
+        tokens_per_char = safe_ratio(tokens, chars)
+    if chars_per_token == 0.0:
+        chars_per_token = safe_ratio(chars, tokens)
+    return tokens_per_char, chars_per_token
+
+
+def enrich_result_metrics(row: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(row)
+    train_tpc, train_cpt = token_scale_from_result(enriched, "train")
+    val_tpc, _ = token_scale_from_result(enriched, "val")
+    final_train_loss = to_float(enriched.get("final_train_loss"), default=float("nan"))
+    final_val_loss = to_float(enriched.get("final_val_loss"), default=float("nan"))
+    best_val_loss = to_float(enriched.get("best_val_loss"), default=final_val_loss)
+    tokens_seen = to_float(enriched.get("tokens_seen"), default=0.0)
+    parameter_count = to_float(enriched.get("parameter_count"), default=0.0)
+    compute_proxy = to_float(enriched.get("compute_proxy"), default=0.0)
+    if compute_proxy == 0.0:
+        compute_proxy = to_float(enriched.get("compute_proxy_param_tokens"), default=0.0)
+    if compute_proxy == 0.0:
+        compute_proxy = parameter_count * tokens_seen
+    estimated_train_flops = to_float(enriched.get("estimated_train_flops"), default=0.0)
+    if estimated_train_flops == 0.0:
+        estimated_train_flops = TRAINING_FLOPS_FACTOR * compute_proxy
+    enriched.setdefault("final_train_nats_per_char", final_train_loss * train_tpc)
+    enriched.setdefault("final_val_nats_per_char", final_val_loss * val_tpc)
+    enriched.setdefault("final_train_bits_per_char", final_train_loss * train_tpc / LN2)
+    enriched.setdefault("final_val_bits_per_char", final_val_loss * val_tpc / LN2)
+    enriched.setdefault("best_val_nats_per_char", best_val_loss * val_tpc)
+    enriched.setdefault("best_val_bits_per_char", best_val_loss * val_tpc / LN2)
+    enriched.setdefault("final_minus_best_val_loss", final_val_loss - best_val_loss)
+    enriched.setdefault("best_tokens_seen", int(enriched.get("best_step", 0) or 0) * int(enriched.get("batch_size", 0) or 0) * int(enriched.get("context_length", 0) or 0))
+    enriched.setdefault("estimated_chars_seen", tokens_seen * train_cpt)
+    enriched.setdefault("tokens_per_param", safe_ratio(tokens_seen, parameter_count))
+    enriched.setdefault("tokens_per_parameter", safe_ratio(tokens_seen, parameter_count))
+    enriched.setdefault("compute_proxy", compute_proxy)
+    enriched.setdefault("compute_proxy_param_tokens", compute_proxy)
+    enriched.setdefault("estimated_train_flops", estimated_train_flops)
+    enriched.setdefault("tokens_per_sec_after_warmup", enriched.get("tokens_per_sec", 0.0))
+    return enriched
 
 
 def run_number_from_result(row: dict[str, Any]) -> int:
@@ -272,6 +352,8 @@ def expand_epoch_milestones(matrix_rows: list[dict[str, str]], results: list[dic
             continue
         train_tpc = float(result.get("cache_vocab_manifest", {}).get("train_tokens_per_char", 1.0))
         val_tpc = float(result.get("cache_vocab_manifest", {}).get("val_tokens_per_char", 1.0))
+        train_cpt = float(result.get("cache_vocab_manifest", {}).get("train_chars_per_token", safe_ratio(1.0, train_tpc)))
+        parameter_count = float(result.get("parameter_count", 0.0))
         for milestone in milestones:
             event = milestone_event(history, milestone)
             if event is None:
@@ -280,6 +362,9 @@ def expand_epoch_milestones(matrix_rows: list[dict[str, str]], results: list[dic
             best_event = min(events_to_milestone, key=lambda row: float(row.get("val_loss", float("inf"))))
             train_loss = float(event["train_loss"])
             val_loss = float(event["val_loss"])
+            best_val_loss = float(best_event.get("val_loss", val_loss))
+            tokens_seen = int(event.get("tokens_seen", result.get("tokens_seen", 0)))
+            compute_proxy = parameter_count * tokens_seen
             virtual_result = dict(result)
             virtual_result.update(
                 {
@@ -291,14 +376,27 @@ def expand_epoch_milestones(matrix_rows: list[dict[str, str]], results: list[dic
                     "resolved_epochs": float(event.get("epoch", milestone)),
                     "final_train_loss": train_loss,
                     "final_val_loss": val_loss,
+                    "final_train_nats_per_char": train_loss * train_tpc,
+                    "final_val_nats_per_char": val_loss * val_tpc,
                     "final_train_bits_per_char": train_loss * train_tpc / math.log(2),
                     "final_val_bits_per_char": val_loss * val_tpc / math.log(2),
-                    "best_val_loss": float(best_event.get("val_loss", val_loss)),
+                    "best_val_loss": best_val_loss,
+                    "best_val_nats_per_char": best_val_loss * val_tpc,
+                    "best_val_bits_per_char": best_val_loss * val_tpc / math.log(2),
                     "best_epoch": float(best_event.get("epoch", milestone)),
+                    "best_tokens_seen": int(best_event.get("tokens_seen", tokens_seen)),
+                    "final_minus_best_val_loss": val_loss - best_val_loss,
                     "elapsed_sec": float(event.get("elapsed_sec", result.get("elapsed_sec", 0.0))),
                     "seconds_per_epoch": float(event.get("elapsed_sec", result.get("elapsed_sec", 0.0))) / max(1, milestone),
-                    "tokens_seen": int(event.get("tokens_seen", result.get("tokens_seen", 0))),
+                    "tokens_seen": tokens_seen,
+                    "estimated_chars_seen": tokens_seen * train_cpt,
+                    "tokens_per_param": safe_ratio(tokens_seen, parameter_count),
+                    "tokens_per_parameter": safe_ratio(tokens_seen, parameter_count),
+                    "compute_proxy": compute_proxy,
+                    "compute_proxy_param_tokens": compute_proxy,
+                    "estimated_train_flops": TRAINING_FLOPS_FACTOR * compute_proxy,
                     "tokens_per_sec": float(event.get("tokens_per_sec", result.get("tokens_per_sec", 0.0))),
+                    "tokens_per_sec_after_warmup": float(event.get("tokens_per_sec_after_warmup", result.get("tokens_per_sec_after_warmup", result.get("tokens_per_sec", 0.0)))),
                     "epoch_milestones": "",
                 }
             )
@@ -383,6 +481,41 @@ def paired_deltas(results: list[dict[str, Any]], metric: str) -> dict[tuple[str,
     return deltas
 
 
+def paired_delta_details(results: list[dict[str, Any]], metric: str) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    by_phase_condition_seed: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for row in results:
+        by_phase_condition_seed[(row["phase"], row["condition_id"], parse_int(row["seed"]))] = row
+
+    details: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in results:
+        phase = row["phase"]
+        baseline = BASELINES.get(phase)
+        if baseline is None or row["condition_id"] == baseline:
+            continue
+        seed = parse_int(row["seed"])
+        base_row = by_phase_condition_seed.get((phase, baseline, seed))
+        if base_row is None or metric not in base_row or metric not in row:
+            continue
+        baseline_value = float(base_row[metric])
+        condition_value = float(row[metric])
+        details[(phase, row["condition_id"])].append(
+            {
+                "seed": seed,
+                "baseline_condition_id": baseline,
+                "baseline_value": baseline_value,
+                "condition_value": condition_value,
+                "delta": condition_value - baseline_value,
+            }
+        )
+    return details
+
+
+def better_than_baseline(delta: float, metric: str) -> bool:
+    if metric in HIGHER_IS_BETTER:
+        return delta > 0
+    return delta < 0
+
+
 def aggregate(matrix_rows: list[dict[str, str]], results: list[dict[str, Any]], bootstrap: int, seed: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     rng = random.Random(seed)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -393,10 +526,12 @@ def aggregate(matrix_rows: list[dict[str, str]], results: list[dict[str, Any]], 
     planned_by_condition: dict[str, int] = defaultdict(int)
     for row in matrix_rows:
         planned_by_condition[row["condition_id"]] += 1
-    delta_bits = paired_deltas(results, "final_val_bits_per_char")
+    delta_details_by_metric = {metric: paired_delta_details(results, metric) for metric in METRICS}
     rows: list[dict[str, Any]] = []
     for condition_id, matrix_row in sorted(lookup.items(), key=lambda item: parse_int(item[1]["run_number"])):
         condition_results = grouped.get(condition_id, [])
+        screen_ready = len(condition_results) >= 3
+        claim_ready = len(condition_results) >= 10
         summary: dict[str, Any] = {
             "phase": matrix_row["phase"],
             "condition_id": condition_id,
@@ -406,6 +541,8 @@ def aggregate(matrix_rows: list[dict[str, str]], results: list[dict[str, Any]], 
             "axis_value": matrix_row.get("axis_value", ""),
             "planned_runs": planned_by_condition[condition_id],
             "completed_runs": len(condition_results),
+            "screen_ready": screen_ready,
+            "claim_ready": claim_ready,
             "ready_for_screen": len(condition_results) >= min(3, planned_by_condition[condition_id]) and len(condition_results) >= planned_by_condition[condition_id],
             "ready_for_claim": len(condition_results) >= 10 and len(condition_results) >= planned_by_condition[condition_id],
         }
@@ -413,16 +550,31 @@ def aggregate(matrix_rows: list[dict[str, str]], results: list[dict[str, Any]], 
             metric_stats = stats_for([float(row[metric]) for row in condition_results if metric in row], bootstrap, rng)
             for key, value in metric_stats.items():
                 summary[f"{metric}_{key}"] = value
-        deltas = delta_bits.get((matrix_row["phase"], condition_id), [])
+            metric_details = delta_details_by_metric[metric].get((matrix_row["phase"], condition_id), [])
+            metric_deltas = [float(detail["delta"]) for detail in metric_details]
+            delta_stats = stats_for(metric_deltas, bootstrap, rng)
+            for key, value in delta_stats.items():
+                summary[f"{metric}_paired_delta_to_baseline_{key}"] = value
+            if metric_details:
+                wins = sum(1 for detail in metric_details if better_than_baseline(float(detail["delta"]), metric))
+                summary[f"{metric}_baseline_win_rate"] = wins / len(metric_details)
+            else:
+                summary[f"{metric}_baseline_win_rate"] = ""
+        primary_details = delta_details_by_metric["final_val_bits_per_char"].get((matrix_row["phase"], condition_id), [])
+        deltas = [float(detail["delta"]) for detail in primary_details]
         delta_stats = stats_for(deltas, bootstrap, rng)
         for key, value in delta_stats.items():
             summary[f"paired_delta_bits_vs_phase_baseline_{key}"] = value
+        summary["paired_delta_to_baseline_median"] = delta_stats.get("median", "")
+        summary["paired_delta_to_baseline_by_seed"] = json.dumps(primary_details, ensure_ascii=False, sort_keys=True) if primary_details else ""
         if deltas:
-            summary["beats_baseline_count"] = sum(1 for value in deltas if value < 0)
+            summary["beats_baseline_count"] = sum(1 for value in deltas if better_than_baseline(value, "final_val_bits_per_char"))
             summary["beats_baseline_ratio"] = summary["beats_baseline_count"] / len(deltas)
+            summary["baseline_win_rate"] = summary["beats_baseline_ratio"]
         else:
             summary["beats_baseline_count"] = ""
             summary["beats_baseline_ratio"] = ""
+            summary["baseline_win_rate"] = ""
         rows.append(summary)
 
     meta = {
@@ -492,10 +644,13 @@ def write_report(path: Path, rows: list[dict[str, Any]], meta: dict[str, Any]) -
         "",
         "## 조건별 요약",
         "",
-        "| phase | 조건 | 단계 | 축 | 값 | n | 화면 검토 가능 | 주장 가능 | 검증 bits/char 중앙값 | 검증 IQR | 과적합 중앙값 | gap 중앙값 | 시간 h 중앙값 | tok/s 중앙값 | paired delta 중앙값 | 기준선 승률 |",
+        "| phase | 조건 | 단계 | 축 | 값 | n | 화면 검토 가능 | 주장 가능 | 검증 bits/char 중앙값 | 검증 IQR | 과적합 중앙값 | gap 중앙값 | 시간 h 중앙값 | warm tok/s 중앙값 | paired delta 중앙값 | 기준선 승률 |",
         "| --- | --- | --- | --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
+        warm_tokens_per_sec = row.get("tokens_per_sec_after_warmup_median")
+        if warm_tokens_per_sec in ("", None):
+            warm_tokens_per_sec = row.get("tokens_per_sec_median")
         lines.append(
             "| "
             + " | ".join(
@@ -513,9 +668,9 @@ def write_report(path: Path, rows: list[dict[str, Any]], meta: dict[str, Any]) -
                     fmt(row.get("overfit_score_median")),
                     fmt(row.get("final_generalization_gap_median")),
                     fmt(None if row.get("elapsed_sec_median") is None else float(row.get("elapsed_sec_median", float("nan"))) / 3600),
-                    fmt(row.get("tokens_per_sec_median")),
-                    fmt(row.get("paired_delta_bits_vs_phase_baseline_median")),
-                    fmt(row.get("beats_baseline_ratio")),
+                    fmt(warm_tokens_per_sec),
+                    fmt(row.get("paired_delta_to_baseline_median")),
+                    fmt(row.get("baseline_win_rate")),
                 ]
             )
             + " |"
@@ -528,6 +683,7 @@ def main() -> None:
     args = parse_args()
     physical_matrix_rows = read_matrix(args.matrix)
     physical_results, scan_meta = load_results(args.runs_dir)
+    physical_results = [enrich_result_metrics(row) for row in physical_results]
     audit = build_result_audit(physical_matrix_rows, physical_results, scan_meta)
     ledger_rows = write_all_results_jsonl(args.all_results_jsonl, physical_matrix_rows, physical_results)
     audit["all_results_jsonl"] = str(args.all_results_jsonl)
@@ -543,6 +699,7 @@ def main() -> None:
         else "FAIL"
     )
     matrix_rows, results = expand_epoch_milestones(physical_matrix_rows, physical_results)
+    results = [enrich_result_metrics(row) for row in results]
     rows, meta = aggregate(matrix_rows, results, bootstrap=args.bootstrap, seed=args.seed)
     meta["planned_physical_runs"] = len(physical_matrix_rows)
     meta["planned_analysis_rows"] = len(matrix_rows)

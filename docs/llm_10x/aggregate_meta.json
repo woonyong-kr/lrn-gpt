@@ -1,6 +1,6 @@
 {
   "all_results_jsonl": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/llm_10x/all_run_results.jsonl",
-  "all_results_ledger_rows": 61,
+  "all_results_ledger_rows": 65,
   "claim_ready_conditions": 0,
   "completed_physical_run_numbers": [
     1,
@@ -52,6 +52,10 @@
     49,
     50,
     51,
+    52,
+    53,
+    54,
+    109,
     139,
     140,
     141,
@@ -65,9 +69,9 @@
     272,
     273
   ],
-  "completed_physical_runs": 61,
+  "completed_physical_runs": 65,
   "completed_results_without_matrix": [],
-  "completed_runs": 58,
+  "completed_runs": 62,
   "duplicate_completed_run_numbers": [],
   "ledger_matches_completed_physical_runs": true,
   "matrix_result_mismatch_count": 0,
@@ -76,9 +80,6 @@
   "pending_physical_run_numbers": [
     41,
     42,
-    52,
-    53,
-    54,
     55,
     56,
     57,
@@ -133,7 +134,6 @@
     106,
     107,
     108,
-    109,
     110,
     111,
     112,
@@ -368,14 +368,14 @@
     353,
     354
   ],
-  "pending_physical_runs": 293,
+  "pending_physical_runs": 289,
   "planned_analysis_rows": 390,
   "planned_conditions": 130,
   "planned_physical_runs": 354,
   "planned_runs": 390,
-  "result_file_count": 61,
+  "result_file_count": 65,
   "result_ledger_status": "PASS",
   "result_load_error_count": 0,
   "result_load_errors": [],
-  "screen_ready_conditions": 19
+  "screen_ready_conditions": 20
 }

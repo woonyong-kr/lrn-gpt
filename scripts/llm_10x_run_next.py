@@ -26,6 +26,10 @@ from src.model import GPTModel  # noqa: E402
 from src.train import calc_loss_batch, calc_loss_loader  # noqa: E402
 
 
+LN2 = math.log(2.0)
+TRAINING_FLOPS_FACTOR = 6
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", type=Path, default=MATRIX_PATH)
@@ -172,6 +176,44 @@ def compute_overfit_metrics(initial_train_loss: float, initial_val_loss: float, 
     }
 
 
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return 0.0 if denominator == 0 else numerator / denominator
+
+
+def token_scale_from_manifest(manifest: dict[str, Any], split: str) -> tuple[float, float]:
+    tokens_per_char_key = f"{split}_tokens_per_char"
+    chars_per_token_key = f"{split}_chars_per_token"
+    tokens_key = f"{split}_tokens"
+    chars_key = f"{split}_chars"
+    tokens_per_char = float(manifest.get(tokens_per_char_key, 0.0) or 0.0)
+    chars_per_token = float(manifest.get(chars_per_token_key, 0.0) or 0.0)
+    tokens = float(manifest.get(tokens_key, 0.0) or 0.0)
+    chars = float(manifest.get(chars_key, 0.0) or 0.0)
+    if tokens_per_char == 0.0:
+        tokens_per_char = safe_ratio(tokens, chars)
+    if chars_per_token == 0.0:
+        chars_per_token = safe_ratio(chars, tokens)
+    return tokens_per_char, chars_per_token
+
+
+def per_char_metrics(loss: float, tokens_per_char: float) -> dict[str, float]:
+    nats_per_char = loss * tokens_per_char
+    return {
+        "nats_per_char": nats_per_char,
+        "bits_per_char": nats_per_char / LN2,
+    }
+
+
+def estimate_eval_tokens(data_loader: Any, num_batches: int) -> int:
+    if num_batches <= 0 or len(data_loader) == 0:
+        return 0
+    dataset_len = len(data_loader.dataset)
+    batch_size = int(data_loader.batch_size or 1)
+    context_length = int(getattr(data_loader.dataset, "context_length", 0))
+    sample_count = min(dataset_len, min(num_batches, len(data_loader)) * batch_size)
+    return sample_count * context_length
+
+
 def write_progress_status(run_dir: Path, args: argparse.Namespace, payload: dict[str, Any]) -> None:
     updated = {"updated_at": datetime.now(timezone.utc).isoformat(), **payload}
     write_json(run_dir / "status.json", updated)
@@ -259,16 +301,30 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
     val_loader = create_dataloader(val_ids, context_length=context_length, batch_size=batch_size, stride=stride, shuffle=False, drop_last=False)
     model_cfg = model_config_from_row(row)
     model = GPTModel(model_cfg.to_dict()).to(device)
+    parameter_count = count_parameters(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=parse_float(record["learning_rate"]), weight_decay=parse_float(record["weight_decay"]))
 
     initial_train_loss = calc_loss_loader(train_loader, model, device, num_batches=args.eval_batches)
     initial_val_loss = calc_loss_loader(val_loader, model, device, num_batches=args.eval_batches)
+    train_tokens_per_char, train_chars_per_token = token_scale_from_manifest(cache_manifest, "train")
+    val_tokens_per_char, val_chars_per_token = token_scale_from_manifest(cache_manifest, "val")
+    eval_train_tokens = estimate_eval_tokens(train_loader, args.eval_batches)
+    eval_val_tokens = estimate_eval_tokens(val_loader, args.eval_batches)
+    eval_train_chars = eval_train_tokens * train_chars_per_token
+    eval_val_chars = eval_val_tokens * val_chars_per_token
     history_path = run_dir / "history.jsonl"
     best_val_loss = float("inf")
     best_step = 0
+    best_epoch = 0.0
+    best_tokens_seen = 0
     tokens_seen = 0
     last_loss = initial_train_loss
     start = time.perf_counter()
+    warmup_steps = min(20, total_steps // 10)
+    warmup_excluded_tokens = 0
+    warmup_excluded_elapsed = 0.0
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
     train_iter = iter(train_loader)
     model.train()
     write_progress_status(
@@ -303,6 +359,7 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
                 train_iter = iter(train_loader)
                 input_batch, target_batch = next(train_iter)
 
+            step_start = time.perf_counter()
             optimizer.zero_grad(set_to_none=True)
             loss = calc_loss_batch(input_batch, target_batch, model, device)
             loss.backward()
@@ -311,8 +368,14 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
             optimizer.step()
             last_loss = float(loss.item())
-            tokens_seen += int(input_batch.numel())
+            batch_tokens = int(input_batch.numel())
+            tokens_seen += batch_tokens
+            step_elapsed = time.perf_counter() - step_start
+            if step > warmup_steps:
+                warmup_excluded_tokens += batch_tokens
+                warmup_excluded_elapsed += step_elapsed
             elapsed_so_far = time.perf_counter() - start
+            tokens_per_sec_after_warmup = safe_ratio(warmup_excluded_tokens, warmup_excluded_elapsed)
 
             end_of_epoch = step % steps_per_epoch == 0
             final_step = step == total_steps
@@ -339,6 +402,7 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
                         "last_step_loss": last_loss,
                         "tokens_seen": tokens_seen,
                         "tokens_per_sec": 0.0 if elapsed_so_far == 0 else tokens_seen / elapsed_so_far,
+                        "tokens_per_sec_after_warmup": tokens_per_sec_after_warmup,
                         "started_at": started_at,
                     },
                 )
@@ -348,15 +412,26 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
                 epoch = step / steps_per_epoch
                 event_elapsed = time.perf_counter() - start
                 event_overfit = compute_overfit_metrics(initial_train_loss, initial_val_loss, train_loss, val_loss)
+                event_train_pc = per_char_metrics(train_loss, train_tokens_per_char)
+                event_val_pc = per_char_metrics(val_loss, val_tokens_per_char)
+                current_best_val_loss = min(best_val_loss, val_loss)
                 event = {
                     "step": step,
                     "epoch": epoch,
                     "train_loss": train_loss,
                     "val_loss": val_loss,
+                    "train_nats_per_char": event_train_pc["nats_per_char"],
+                    "train_bits_per_char": event_train_pc["bits_per_char"],
+                    "val_nats_per_char": event_val_pc["nats_per_char"],
+                    "val_bits_per_char": event_val_pc["bits_per_char"],
                     "last_step_loss": last_loss,
                     "elapsed_sec": event_elapsed,
                     "tokens_seen": tokens_seen,
+                    "estimated_chars_seen": tokens_seen * train_chars_per_token,
                     "tokens_per_sec": 0.0 if event_elapsed == 0 else tokens_seen / event_elapsed,
+                    "tokens_per_sec_after_warmup": tokens_per_sec_after_warmup,
+                    "final_minus_current_best_val_loss": val_loss - current_best_val_loss,
+                    "best_val_loss_so_far": current_best_val_loss,
                     **event_overfit,
                 }
                 history.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
@@ -364,6 +439,8 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     best_step = step
+                    best_epoch = epoch
+                    best_tokens_seen = tokens_seen
                     if not args.no_checkpoints:
                         save_checkpoint(model, optimizer, run_dir / "checkpoints" / "best.pt", {"step": step, "epoch": epoch, "val_loss": val_loss, "config": record})
             if not args.no_checkpoints and should_checkpoint(step, steps_per_epoch, args.checkpoint_every_epochs):
@@ -373,8 +450,15 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
     final_train_loss = calc_loss_loader(train_loader, model, device, num_batches=args.eval_batches)
     final_val_loss = calc_loss_loader(val_loader, model, device, num_batches=args.eval_batches)
     overfit_metrics = compute_overfit_metrics(initial_train_loss, initial_val_loss, final_train_loss, final_val_loss)
-    train_tokens_per_char = cache_manifest["train_tokens_per_char"]
-    val_tokens_per_char = cache_manifest["val_tokens_per_char"]
+    final_train_pc = per_char_metrics(final_train_loss, train_tokens_per_char)
+    final_val_pc = per_char_metrics(final_val_loss, val_tokens_per_char)
+    best_val_pc = per_char_metrics(best_val_loss, val_tokens_per_char)
+    compute_proxy = parameter_count * tokens_seen
+    estimated_train_flops = TRAINING_FLOPS_FACTOR * compute_proxy
+    tokens_per_sec_after_warmup = safe_ratio(warmup_excluded_tokens, warmup_excluded_elapsed)
+    peak_gpu_memory_mb = None
+    if device.type == "cuda":
+        peak_gpu_memory_mb = torch.cuda.max_memory_allocated(device) / (1024 * 1024)
     result = {
         "status": "completed",
         **record,
@@ -382,19 +466,44 @@ def run_one(row: dict[str, str], args: argparse.Namespace) -> dict[str, Any]:
         "steps_per_epoch": steps_per_epoch,
         "max_steps": total_steps,
         "resolved_epochs": epochs,
-        "parameter_count": count_parameters(model),
+        "optimizer_updates": total_steps,
+        "parameter_count": parameter_count,
         "initial_train_loss": initial_train_loss,
         "initial_val_loss": initial_val_loss,
         "final_train_loss": final_train_loss,
         "final_val_loss": final_val_loss,
         **overfit_metrics,
-        "final_train_bits_per_char": final_train_loss * train_tokens_per_char / math.log(2),
-        "final_val_bits_per_char": final_val_loss * val_tokens_per_char / math.log(2),
+        "final_train_nats_per_char": final_train_pc["nats_per_char"],
+        "final_val_nats_per_char": final_val_pc["nats_per_char"],
+        "final_train_bits_per_char": final_train_pc["bits_per_char"],
+        "final_val_bits_per_char": final_val_pc["bits_per_char"],
         "best_val_loss": best_val_loss,
+        "best_val_nats_per_char": best_val_pc["nats_per_char"],
+        "best_val_bits_per_char": best_val_pc["bits_per_char"],
         "best_step": best_step,
-        "best_epoch": 0.0 if steps_per_epoch == 0 else best_step / steps_per_epoch,
+        "best_epoch": best_epoch,
+        "best_tokens_seen": best_tokens_seen,
+        "final_minus_best_val_loss": final_val_loss - best_val_loss,
         "tokens_seen": tokens_seen,
+        "estimated_chars_seen": tokens_seen * train_chars_per_token,
+        "tokens_per_param": safe_ratio(tokens_seen, parameter_count),
+        "tokens_per_parameter": safe_ratio(tokens_seen, parameter_count),
+        "compute_proxy": compute_proxy,
+        "compute_proxy_param_tokens": compute_proxy,
+        "estimated_train_flops": estimated_train_flops,
         "tokens_per_sec": 0.0 if elapsed == 0 else tokens_seen / elapsed,
+        "tokens_per_sec_after_warmup": tokens_per_sec_after_warmup,
+        "warmup_steps": warmup_steps,
+        "warmup_excluded_tokens": warmup_excluded_tokens,
+        "warmup_excluded_elapsed_sec": warmup_excluded_elapsed,
+        "peak_gpu_memory_mb": peak_gpu_memory_mb,
+        "eval_batches": args.eval_batches,
+        "eval_tokens": eval_val_tokens,
+        "eval_chars": eval_val_chars,
+        "eval_train_tokens": eval_train_tokens,
+        "eval_val_tokens": eval_val_tokens,
+        "eval_train_chars": eval_train_chars,
+        "eval_val_chars": eval_val_chars,
         "seconds_per_epoch": 0.0 if epochs == 0 else elapsed / epochs,
         "elapsed_sec": elapsed,
         "cache_vocab_manifest": cache_manifest,

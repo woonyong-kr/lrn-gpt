@@ -86,6 +86,13 @@ def to_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def warm_tokens_per_sec(row: dict[str, Any]) -> float:
+    value = to_float(row.get("tokens_per_sec_after_warmup_median"))
+    if value == value:
+        return value
+    return to_float(row.get("tokens_per_sec_median"))
+
+
 def read_summary(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
@@ -462,7 +469,7 @@ def plot_phase_speed(phase: str, rows: list[dict[str, Any]], output_path: Path) 
     labels = [str(row["axis_value"]) for row in phase_rows]
     x = np.arange(len(labels))
     elapsed_min = [to_float(row.get("elapsed_sec_median")) / 60.0 for row in phase_rows]
-    tokens_sec = [to_float(row.get("tokens_per_sec_median")) for row in phase_rows]
+    tokens_sec = [warm_tokens_per_sec(row) for row in phase_rows]
     color = PHASE_COLORS.get(phase, "#64748b")
 
     fig, axes = plt.subplots(2, 1, figsize=(8.4, 6.6), sharex=True)
@@ -471,7 +478,7 @@ def plot_phase_speed(phase: str, rows: list[dict[str, Any]], output_path: Path) 
     axes[0].set_title(f"{PHASE_LABELS.get(phase, phase)} - runtime and throughput")
     axes[0].grid(axis="y", alpha=0.22)
     axes[1].plot(x, tokens_sec, marker="o", color="#0f172a", linewidth=2)
-    axes[1].set_ylabel("Median tokens/sec")
+    axes[1].set_ylabel("Median warm tok/s")
     axes[1].set_xlabel(f"{PHASE_LABELS.get(phase, phase)} value")
     axes[1].grid(alpha=0.22)
     axes[1].set_xticks(x)
@@ -1003,7 +1010,7 @@ def write_report(
     lines.append("")
     lines.append("## 현재 상위 Screen-Ready 조건")
     lines.append("")
-    lines.append("| 순위 | 조건 | 축 그룹 | 축 | 값 | n | 검증 bits/char 중앙값 | IQR | 중앙 실행 시간(분) | 중앙 tok/s |")
+    lines.append("| 순위 | 조건 | 축 그룹 | 축 | 값 | n | 검증 bits/char 중앙값 | IQR | 중앙 실행 시간(분) | 중앙 warm tok/s |")
     lines.append("| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for index, row in enumerate(ranked[:15], start=1):
         elapsed_min = to_float(row.get("elapsed_sec_median")) / 60.0
@@ -1020,7 +1027,7 @@ def write_report(
                     fmt_float(row.get("final_val_bits_per_char_median"), 5),
                     fmt_float(row.get("final_val_bits_per_char_iqr"), 5),
                     f"{elapsed_min:.2f}",
-                    fmt_float(row.get("tokens_per_sec_median"), 0),
+                    fmt_float(warm_tokens_per_sec(row), 0),
                 ]
             )
             + " |"

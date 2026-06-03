@@ -1,164 +1,179 @@
-# LLM 10x 중간 보고서 - LLM 개발자 지표 기준
+# LLM 10x Screen-Ready 중간 보고서
 
-- generated_at_utc: `2026-06-03T15:25:02+00:00`
-- completed_physical_runs: `60` / `354`
-- pending_physical_runs: `294`
-- screen_ready_conditions: `19`
+- generated_at_utc: `2026-06-03T16:00:39+00:00`
+- completed_physical_runs: `65` / `354`
+- pending_physical_runs: `289`
+- screen_ready_conditions: `20`
 - claim_ready_conditions: `0`
 - result_ledger_status: `PASS`
 - all_results_jsonl: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/llm_10x/all_run_results.jsonl`
-- queue_now: `run_0039` / `EH1500` / `training` / `50/324` updates
 
-## 요약
+## 범위
 
-이번 개정판은 단순 학습 로그 시각화가 아니라 LLM 실험에서 보통 분리해서 보는 `pretraining quality`, `tokenizer comparability`, `scaling/compute efficiency`, `system efficiency`, `unmeasured benchmark/safety gaps` 순서로 결과를 다시 정리했습니다.
-- 현재 screen-ready 품질 1위는 `CTX0256`이며 validation bits/char 중앙값은 `3.60530`, validation perplexity 중앙값은 `303.8`입니다.
-- compute proxy까지 같이 보면 현재 비용 효율 후보는 `FFN02`입니다. 품질-계산량 곱 기준으로 가장 낮고, 추정 학습 compute는 `92.4` TFLOPs입니다.
-- `claim-ready=0`이므로 이 문서는 최종 주장용이 아니라, 지금까지의 결과로 다음 반복/보강 순서를 정하는 중간 의사결정 문서입니다.
+이 문서는 중간 선별용 보고서입니다. 실제 실행이 3회 이상 완료된 조건을 screen-ready로 보고 그래프를 만들었습니다. 아직 claim-ready 깊이에 도달한 조건은 없으므로, 아래 결과는 최종 통계 주장용이 아니라 다음 실험 우선순위를 정하기 위한 근거입니다.
 
-## 지표 체계
+현재 최소 2개 이상의 screen-ready 조건이 있어 축 방향성을 볼 수 있는 항목은 다음과 같습니다.
+- Learning Rate: `12` screen-ready conditions
+- Vocab Size: `4` screen-ready conditions
+- Context Length: `2` screen-ready conditions
+- FFN Mult: `2` screen-ready conditions
 
-| 영역 | 현재 보고서에서 보는 지표 | 현재 상태 | 해석 |
-| --- | --- | --- | --- |
-| Pretraining 품질 | validation loss, perplexity, bits/token, bits/char | 사용 가능 | loss가 낮을수록 좋지만 tokenizer가 다르면 bits/char를 우선 비교 |
-| Tokenizer 공정성 | chars/token, bits/char, tail vocab type, top-token mass | 사용 가능 | token loss만 비교하면 vocab size가 다른 조건에서 불공정할 수 있음 |
-| Scaling/compute | parameter_count, tokens_seen, FLOPs proxy = 6*N*T, loss-vs-compute | 근사 가능 | 실제 MFU는 없지만 조건 간 계산량 proxy 비교는 가능 |
-| 시스템 비용 | tokens/sec, elapsed time, seconds/epoch | 사용 가능 | 같은 품질이면 더 빠른 조건이 우선 후보 |
-| Downstream benchmark | MMLU, BIG-bench, GSM8K, HumanEval | 없음 | 현재는 사전학습 소형 LM 탐색이라 태스크 성능 결론 불가 |
-| Chat/instruction | pairwise win rate, LLM judge, MT-Bench류 | 없음 | instruction tuning과 평가셋이 없어 사용자 선호 결론 불가 |
-| Safety/holistic | toxicity, robustness, calibration, fairness | 없음 | 별도 HELM류 harness가 필요 |
-| Sample quality | next-token/sample inspection | 현재 불가 | 큐가 `--no-checkpoints`로 실행되어 완료 run의 모델 가중치가 없음 |
+## 기준 데이터셋과 규모
 
-## 데이터셋과 비교 가능성
-
-`obsidian_llm_10x`는 `1,601`개 문서와 `4,828`개 chunk에서 만든 LM 데이터셋입니다. train은 `14,898,445` 문자, validation은 `1,321,972` 문자입니다.
+이 보고서는 `obsidian_llm_10x`를 기준으로 합니다. 하나의 LM 학습 데이터셋이지만, 원천은 `6`개 source 묶음에서 온 `1,601`개 문서와 `4,828`개 chunk입니다. `NSMC`는 이 screen-ready 실험의 학습 기준이 아니라, 별도 한글 stress test 후보로만 봐야 합니다.
 - LM 파일 문자 수는 기존 NSMC 파일 대비 약 `10.81배`입니다.
-- train 문자 구성은 한글 `6.28%`, ASCII `74.80%`입니다. 따라서 현재 결론은 한글 전용 tokenizer 결론이 아니라 영어/코드/LLM 자료가 많은 혼합 corpus 결론입니다.
 
-## 핵심 Figures
+| split | 파일 | 문자 | 공백 제외 문자 | 공백 기준 단어 | 고유 공백 단어 | word-like 단위 | 고유 word-like | 한글/공백제외 | ASCII/공백제외 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| train | `data/obsidian_llm_10x_lm_train.txt` | 14,898,445 | 13,191,881 | 1,194,327 | 157,834 | 1,558,469 | 205,777 | 6.28% | 74.80% |
+| val | `data/obsidian_llm_10x_lm_val.txt` | 1,321,972 | 1,162,752 | 110,512 | 30,203 | 141,204 | 28,540 | 6.36% | 74.69% |
 
-### Figure 1. Pretraining 품질 순위
+## 발표/논문용 Figure 요약
 
-bits/char 기준으로 tokenizer 차이를 보정한 품질 순위입니다. 막대 옆 PPL은 같은 tokenization 조건 안에서 직관을 돕는 보조 지표입니다.
+아래 figure들은 원시 dashboard가 아니라 발표 본문에 바로 쓸 수 있도록 `질문 -> 읽는 법 -> 핵심 해석` 순서로 구성했습니다.
 
-![Figure 1. Pretraining 품질 순위](llm_developer_figures/pretraining_quality_rank.png)
+### Figure 0. 결론 지도
 
-### Figure 2. Loss vs Compute
+- 질문: 지금 이 실험에서 말할 수 있는 주장과 보류해야 하는 주장은 무엇인가?
+- 읽는 법: 왼쪽은 데이터셋 규모, 오른쪽은 현재 결론의 강도와 제한이다.
+- 핵심: 이 보고서는 최종 통계 결론이 아니라 screen-ready 중간 의사결정 문서다.
 
-6*N*T FLOPs proxy와 validation bits/char를 같이 봅니다. 점선은 현재 screen-ready 조건의 compute-quality frontier입니다.
+![Figure 0. 결론 지도](paper_figures/paper_claim_map.svg)
 
-![Figure 2. Loss vs Compute](llm_developer_figures/loss_vs_compute.png)
+### Figure 1. Screen-ready 조건 순위
 
-### Figure 3. Loss vs Tokens
+- 질문: 완료된 조건 중 validation bits/char가 가장 낮은 후보는 무엇인가?
+- 읽는 법: 막대가 길수록 validation bits/char가 낮다. 낮을수록 좋다.
+- 핵심: CTX0256, LR0300, FFN03, V10000이 현재 상위 후보지만 claim-ready 반복 수에는 아직 도달하지 않았다.
 
-개별 physical run의 tokens_seen과 validation bits/char를 봅니다. 대부분 0.1 epoch라 x축이 좁지만, 300-step/324-step 차이와 축별 품질 분산을 확인할 수 있습니다.
+![Figure 1. Screen-ready 조건 순위](paper_figures/paper_screen_ready_ranking.svg)
 
-![Figure 3. Loss vs Tokens](llm_developer_figures/loss_vs_tokens.png)
+### Figure 2. 데이터셋 문자 구성
 
-### Figure 4. Throughput vs Quality
+- 질문: 이 실험을 한글 중심 tokenizer 실험으로 해석해도 되는가?
+- 읽는 법: train/validation의 공백 제외 문자 구성을 비교한다.
+- 핵심: 한글은 약 6%대이고 ASCII가 약 75%이므로, 한글 전용 결론이 아니라 혼합 corpus 결론이다.
 
-tokens/sec와 validation bits/char를 같이 봅니다. 같은 품질이면 오른쪽 아래 조건이 더 좋습니다.
+![Figure 2. 데이터셋 문자 구성](paper_figures/paper_dataset_composition.svg)
 
-![Figure 4. Throughput vs Quality](llm_developer_figures/throughput_quality.png)
+### Figure 3. Vocab 압축 이득과 tail 비용
 
-### Figure 5. Tokenizer 공정성
+- 질문: V6000 -> V10000 개선을 큰 vocab 권고로 바로 말해도 되는가?
+- 읽는 법: 왼쪽은 validation bits/char, 오른쪽은 train 20회 이하 vocab type이다.
+- 핵심: loss는 개선되지만 rare/tail type도 증가한다. 따라서 V10000은 유망 후보이지 최종 권고가 아니다.
 
-vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동시에 보여줍니다.
+![Figure 3. Vocab 압축 이득과 tail 비용](paper_figures/paper_vocab_tradeoff.svg)
 
-![Figure 5. Tokenizer 공정성](llm_developer_figures/tokenizer_fairness.png)
+### Figure 4. Token 쏠림과 분포
 
-## Pretraining 품질 순위
+- 질문: vocab 증가 문제가 한 token 독점인지, tail token 증가인지 어떻게 구분하는가?
+- 읽는 법: top1/top10/top100/merge token 비중을 vocab별로 본다.
+- 핵심: top1 독점보다는 tail token과 긴 merge token의 학습 부족 가능성이 더 중요한 위험이다.
 
-여기서는 `validation bits/char`를 1차 순위 기준으로 둡니다. `validation loss`와 `perplexity`는 token 단위 지표라 같은 tokenizer 안에서는 유용하지만, vocab size 비교에서는 bits/char가 더 공정합니다.
+![Figure 4. Token 쏠림과 분포](paper_figures/paper_token_distribution.svg)
 
-| 순위 | 조건 | 축 | 값 | n | val loss nats/token | val PPL | val bits/token | val bits/char | params(M) | tokens seen(M) | FLOPs proxy(T) | tok/s |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | CTX0256 | Context Length | 256 | 3 | 5.7163 | 303.8 | 8.2469 | 3.60530 | 31.5 | 0.664 | 125.3 | 2298 |
-| 2 | CTX0384 | Context Length | 384 | 3 | 5.8902 | 361.5 | 8.4977 | 3.71494 | 31.5 | 0.664 | 125.6 | 2159 |
-| 3 | LR0300 | Learning Rate | 0.0003 | 3 | 6.0607 | 428.7 | 8.7438 | 3.82250 | 31.6 | 0.664 | 125.9 | 2323 |
-| 4 | LR0200 | Learning Rate | 0.0002 | 3 | 6.0934 | 442.9 | 8.7909 | 3.84309 | 31.6 | 0.664 | 125.9 | 2048 |
-| 5 | FFN03 | FFN Mult | 3 | 3 | 6.1143 | 452.3 | 8.8211 | 3.85629 | 27.4 | 0.664 | 109.1 | 2976 |
-| 6 | V10000 | Vocab Size | 10000 | 3 | 6.0033 | 404.8 | 8.6609 | 3.86029 | 30.6 | 0.676 | 124.0 | 1885 |
-| 7 | FFN02 | FFN Mult | 2 | 3 | 6.1304 | 459.6 | 8.8442 | 3.86642 | 23.2 | 0.664 | 92.4 | 2899 |
-| 8 | LR0150 | Learning Rate | 0.00015 | 3 | 6.1636 | 475.2 | 8.8922 | 3.88740 | 31.6 | 0.664 | 125.9 | 1800 |
-| 9 | V08000 | Vocab Size | 8000 | 3 | 5.9337 | 377.6 | 8.5606 | 3.92661 | 29.6 | 0.694 | 123.2 | 2431 |
-| 10 | LR0500 | Learning Rate | 0.0005 | 3 | 6.2423 | 514.1 | 9.0058 | 3.93704 | 31.6 | 0.664 | 125.9 | 2025 |
-| 11 | LR0100 | Learning Rate | 0.0001 | 3 | 6.3104 | 550.3 | 9.1040 | 3.97997 | 31.6 | 0.664 | 125.9 | 2023 |
-| 12 | LR0700 | Learning Rate | 0.0007 | 3 | 6.3314 | 561.9 | 9.1342 | 3.99320 | 31.6 | 0.664 | 125.9 | 2328 |
-| 13 | LR1500 | Learning Rate | 0.0015 | 3 | 6.4026 | 603.4 | 9.2369 | 4.03809 | 31.6 | 0.664 | 125.9 | 1812 |
-| 14 | LR1000 | Learning Rate | 0.001 | 3 | 6.4082 | 606.8 | 9.2451 | 4.04166 | 31.6 | 0.664 | 125.9 | 2293 |
-| 15 | LR0070 | Learning Rate | 7e-05 | 3 | 6.4541 | 635.3 | 9.3113 | 4.07058 | 31.6 | 0.664 | 125.9 | 2041 |
-| 16 | V06000 | Vocab Size | 6000 | 3 | 5.8858 | 359.9 | 8.4915 | 4.07186 | 28.5 | 0.727 | 124.5 | 1944 |
-| 17 | LR2000 | Learning Rate | 0.002 | 3 | 6.6929 | 806.6 | 9.6558 | 4.22121 | 31.6 | 0.664 | 125.9 | 1720 |
-| 18 | LR0050 | Learning Rate | 5e-05 | 3 | 6.7079 | 818.8 | 9.6774 | 4.23066 | 31.6 | 0.664 | 125.9 | 2048 |
-| 19 | LR3000 | Learning Rate | 0.003 | 3 | 6.7791 | 879.3 | 9.7802 | 4.27561 | 31.6 | 0.664 | 125.9 | 2356 |
 
-## Scaling / Compute 해석
+## 현재 상위 Screen-Ready 조건
 
-현재 모든 run은 대체로 `epoch_cap_per_run=0.1`이라 학습 토큰 수가 비슷합니다. 따라서 scaling law를 본격 피팅하기에는 아직 부족하고, 지금은 `동일 예산 근처에서 어떤 조건이 더 좋은가`를 보는 단계입니다.
+| 순위 | 조건 | 축 그룹 | 축 | 값 | n | 검증 bits/char 중앙값 | IQR | 중앙 실행 시간(분) | 중앙 warm tok/s |
+| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | CTX0256 | Context Length | context_length | 256 | 3 | 3.60530 | 0.02262 | 4.81 | 2298 |
+| 2 | CTX0384 | Context Length | context_length | 384 | 3 | 3.71494 | 0.03440 | 5.12 | 2159 |
+| 3 | V12000 | Vocab Size | vocab_size | 12000 | 3 | 3.82184 | 0.06769 | 6.79 | 1628 |
+| 4 | LR0300 | Learning Rate | learning_rate | 0.0003 | 3 | 3.82250 | 0.06671 | 4.76 | 2323 |
+| 5 | LR0200 | Learning Rate | learning_rate | 0.0002 | 3 | 3.84309 | 0.05119 | 5.40 | 2048 |
+| 6 | FFN03 | FFN Mult | ffn_mult | 3 | 3 | 3.85629 | 0.02897 | 3.72 | 2976 |
+| 7 | V10000 | Vocab Size | vocab_size | 10000 | 3 | 3.86029 | 0.03921 | 5.98 | 1885 |
+| 8 | FFN02 | FFN Mult | ffn_mult | 2 | 3 | 3.86642 | 0.08625 | 3.81 | 2899 |
+| 9 | LR0150 | Learning Rate | learning_rate | 0.00015 | 3 | 3.88740 | 0.05822 | 6.15 | 1800 |
+| 10 | V08000 | Vocab Size | vocab_size | 8000 | 3 | 3.92661 | 0.05091 | 4.76 | 2431 |
+| 11 | LR0500 | Learning Rate | learning_rate | 0.0005 | 3 | 3.93704 | 0.05462 | 5.46 | 2025 |
+| 12 | LR0100 | Learning Rate | learning_rate | 0.0001 | 3 | 3.97997 | 0.04899 | 5.47 | 2023 |
+| 13 | LR0700 | Learning Rate | learning_rate | 0.0007 | 3 | 3.99320 | 0.07960 | 4.75 | 2328 |
+| 14 | LR1500 | Learning Rate | learning_rate | 0.0015 | 3 | 4.03809 | 0.11272 | 6.10 | 1812 |
+| 15 | LR1000 | Learning Rate | learning_rate | 0.001 | 3 | 4.04166 | 0.12894 | 4.82 | 2293 |
 
-현재 compute-quality frontier 조건:
-- `FFN02`: `3.86642` bits/char, `92.4` TFLOPs proxy, `23.2`M params
-- `FFN03`: `3.85629` bits/char, `109.1` TFLOPs proxy, `27.4`M params
-- `CTX0256`: `3.60530` bits/char, `125.3` TFLOPs proxy, `31.5`M params
-
-## 축별 결론
+## 축별 보고
 
 ### Learning Rate
 
-- 품질 1위: `LR0300` (learning_rate=0.0003), `3.82250` bits/char.
-- 비용 효율 1위: `LR0300`, `125.9` TFLOPs proxy.
-- 처리량 1위: `LR3000`, `2356` tok/s.
-- 현재 screen-ready 범위: `5e-05`부터 `0.003`까지, `12` 조건.
-- 해석: 지금까지는 `2e-4`-`3e-4`가 좋은 구간입니다. `3e-4`는 품질이 좋지만 LR3000 계열은 최근 run에서 PPL/bit가 흔들려, 상위 후보 반복 보강이 필요합니다.
+- 현재 최상위 screen-ready 조건: `LR0300` (learning_rate=0.0003), 검증 bits/char 중앙값 `3.82250`.
+- 현재 커버 범위: `5e-05`부터 `0.003`까지, screen-ready 조건 `12`개.
+- 해석: learning rate는 현재 `2e-4`부터 `3e-4` 구간이 우선 후보입니다. 다만 다른 축과 상호작용할 수 있으므로 최종값은 상위 후보 재반복에서 확인해야 합니다.
 
 ### Vocab Size
 
-- 품질 1위: `V10000` (vocab_size=10000), `3.86029` bits/char.
-- 비용 효율 1위: `V10000`, `124.0` TFLOPs proxy.
-- 처리량 1위: `V08000`, `2431` tok/s.
-- 현재 screen-ready 범위: `6000`부터 `10000`까지, `3` 조건.
-- 해석: V10000은 bits/char가 좋아 유망하지만, vocab 확대가 low-frequency tail type을 같이 늘립니다. token loss보다 bits/char와 tail 진단을 같이 봐야 합니다.
+- 현재 최상위 screen-ready 조건: `V12000` (vocab_size=12000), 검증 bits/char 중앙값 `3.82184`.
+- 현재 커버 범위: `6000`부터 `12000`까지, screen-ready 조건 `4`개.
+- 해석: vocab 축은 loss 그래프만 보면 V10000이 좋아 보이지만, tokenizer 진단에서는 tail type 증가가 동시에 나타납니다. 본문 Figure 3과 Figure 4를 기준으로 읽어야 합니다.
 
 ### Context Length
 
-- 품질 1위: `CTX0256` (context_length=256), `3.60530` bits/char.
-- 비용 효율 1위: `CTX0256`, `125.3` TFLOPs proxy.
-- 처리량 1위: `CTX0256`, `2298` tok/s.
-- 현재 screen-ready 범위: `256`부터 `384`까지, `2` 조건.
-- 해석: 0.1 epoch 예산에서는 짧은 context가 더 좋습니다. 긴 context가 나쁜 것이 아니라 제한된 update 수에서 short context가 더 데이터 효율적으로 보이는 신호입니다.
+- 현재 최상위 screen-ready 조건: `CTX0256` (context_length=256), 검증 bits/char 중앙값 `3.60530`.
+- 현재 커버 범위: `256`부터 `384`까지, screen-ready 조건 `2`개.
+- 해석: 현재 `0.1 epoch` 짧은 예산에서는 짧은 context가 유리합니다. 이는 긴 context가 본질적으로 나쁘다는 뜻이 아니라, 제한된 step에서 학습 밀도가 더 높다는 신호일 수 있습니다.
 
 ### FFN Mult
 
-- 품질 1위: `FFN03` (ffn_mult=3), `3.85629` bits/char.
-- 비용 효율 1위: `FFN02`, `92.4` TFLOPs proxy.
-- 처리량 1위: `FFN03`, `2976` tok/s.
-- 현재 screen-ready 범위: `2`부터 `3`까지, `2` 조건.
-- 해석: FFN2/3은 parameter_count가 낮아 비용 효율 후보입니다. 기본 FFN4와 큰 FFN 조건이 screen-ready가 되기 전까지는 최종 모델 크기 결론을 보류해야 합니다.
+- 현재 최상위 screen-ready 조건: `FFN03` (ffn_mult=3), 검증 bits/char 중앙값 `3.85629`.
+- 현재 커버 범위: `2`부터 `3`까지, screen-ready 조건 `2`개.
+- 해석: `ffn_mult=3`은 효율 후보입니다. 하지만 `ffn_mult=4` 기본값과 더 큰 조건의 screen-ready 반복이 필요합니다.
 
-## Tokenizer 공정성 진단
+## Vocab Size Tokenizer 진단
 
-| vocab | train token | val token | val chars/token | train 20회 이하 type | merge 20회 이하 type | top1 | top10 | top100 | 한글 token 비중 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4,000 | 7,822,591 | 684,512 | 1.931 | 148 | 60 | 2.77% | 13.97% | 46.99% | 7.03% |
-| 6,000 | 7,252,032 | 633,917 | 2.085 | 228 | 139 | 2.99% | 14.97% | 43.38% | 7.31% |
-| 8,000 | 6,936,122 | 606,369 | 2.180 | 370 | 281 | 3.12% | 15.62% | 41.77% | 7.19% |
-| 10,000 | 6,752,961 | 589,219 | 2.244 | 592 | 503 | 3.20% | 16.01% | 41.67% | 7.02% |
-| 12,000 | 6,633,675 | 577,924 | 2.287 | 1,010 | 920 | 3.26% | 16.28% | 41.66% | 6.94% |
+아래 표는 screen-ready vocab 조건과 주변 cache를 직접 읽은 것입니다. 현재 3회 이상 학습 결과가 있는 vocab 조건은 `6000, 8000, 10000, 12000`입니다. 따라서 loss 그래프만으로 tokenizer 권고를 확정하지 않고, 실제 token 사용 분포를 함께 봅니다.
 
-`V6000 -> V10000`에서 train token은 약 `6.88%` 줄지만, train 20회 이하 type은 `228`개에서 `592`개로 늘어납니다. 즉 압축 이득과 tail 학습 부족 위험이 동시에 있습니다.
+| vocab | merge rule | train token | val token | train 문자/token | val 문자/token | train 사용 type | train 미사용 type | train 20회 이하 type | merge 20회 이하 type | merge token 비중 | top1 | top10 | top100 | 한글 vocab type | 한글 token 비중 | merge 길이 p95/max |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 4,000 | 3,740 | 7,822,591 | 684,512 | 1.905 | 1.931 | 3,905 | 95 | 148 | 60 | 55.55% | 2.77% | 13.97% | 46.99% | 580 | 7.03% | 6.0 / 32 |
+| 6,000 | 5,740 | 7,252,032 | 633,917 | 2.054 | 2.085 | 5,884 | 116 | 228 | 139 | 59.92% | 2.99% | 14.97% | 43.38% | 963 | 7.31% | 7.0 / 64 |
+| 8,000 | 7,740 | 6,936,122 | 606,369 | 2.148 | 2.180 | 7,859 | 141 | 370 | 281 | 61.76% | 3.12% | 15.62% | 41.77% | 1,387 | 7.19% | 8.0 / 64 |
+| 10,000 | 9,740 | 6,752,961 | 589,219 | 2.206 | 2.244 | 9,817 | 183 | 592 | 503 | 61.98% | 3.20% | 16.01% | 41.67% | 1,908 | 7.02% | 8.0 / 128 |
+| 12,000 | 11,740 | 6,633,675 | 577,924 | 2.246 | 2.287 | 11,722 | 278 | 1,010 | 920 | 62.07% | 3.26% | 16.28% | 41.66% | 2,349 | 6.94% | 8.0 / 128 |
 
-## 아직 이 보고서가 말하지 못하는 것
+- 압축 이득: `V6000 -> V10000`에서 train token은 `7,252,032`개에서 `6,752,961`개로 줄어 약 `6.88%` 감소합니다. val 문자/token도 `2.085`에서 `2.244`로 늘어납니다.
+- tail 비용: 같은 구간에서 train 미사용 vocab type은 `116`개에서 `183`개로, train 20회 이하 vocab type은 `228`개에서 `592`개로 늘어납니다. 이는 embedding/LM head row 일부가 충분히 update되지 않을 수 있다는 신호입니다.
+- 쏠림 판단: top1 비중은 `2.99%`에서 `3.20%`, top10 비중은 `14.97%`에서 `16.01%`로 조금 늘지만, top100 비중은 `43.38%`에서 `41.67%`입니다. 현재 수치만 보면 한 token이 전체를 독점한다기보다, 개행/경로 문자/숫자/구두점 같은 구조 token이 상위권을 차지합니다.
 
-- MMLU/BIG-bench/GSM8K/HumanEval류 downstream 정확도: 평가 harness와 task prompt가 아직 없습니다.
-- Chat/instruction following: instruction tuning이 없고 pairwise judge 또는 사람 평가가 없습니다.
-- Safety/robustness/fairness/toxicity: 별도 평가셋과 rubric이 없습니다.
-- Next-token sample quality: 현재 완료 run들이 `--no-checkpoints`라 모델 가중치를 보존하지 않아 생성 샘플을 만들 수 없습니다.
-- MFU와 실제 비용: GPU/MPS 저수준 FLOPs utilization과 전력/금액 로그가 없어 `6*N*T` proxy만 사용했습니다.
+### Top Token 예시: V10000
 
-## 다음 실행 제안
+| rank | id | token | train 등장 | train 비중 |
+| ---: | ---: | --- | ---: | ---: |
+| 1 | 202 | `\n` | 216,374 | 3.20% |
+| 2 | 66 | `_` | 175,978 | 2.61% |
+| 3 | 18 | `/` | 153,444 | 2.27% |
+| 4 | 23 | `4` | 94,175 | 1.39% |
+| 5 | 17 | `.` | 93,245 | 1.38% |
+| 6 | 27 | `8` | 74,413 | 1.10% |
+| 7 | 14 | `+` | 72,795 | 1.08% |
+| 8 | 15 | `,` | 70,216 | 1.04% |
+| 9 | 16 | `-` | 66,567 | 0.99% |
+| 10 | 19 | `0` | 64,046 | 0.95% |
 
-1. 현재 상위 후보를 `n=10` 반복으로 보강해 claim-ready 조건을 먼저 만듭니다.
-2. 상위 후보 2-3개는 `--with-checkpoints`로 별도 짧은 검증 run을 돌려 next-token sample quality를 붙입니다.
-3. tokenizer 비교는 token loss가 아니라 bits/char, chars/token, tail type, top-token mass를 함께 유지합니다.
-4. downstream 평가는 지금 queue와 분리해서 작은 eval harness로 시작합니다. 이 프로젝트 규모에서는 MMLU 전체보다 domain-relevant cloze/QA와 짧은 next-token qualitative set이 먼저 현실적입니다.
+### 한글 Token 예시
+
+| rank | id | token | train 등장 | train 비중 |
+| ---: | ---: | --- | ---: | ---: |
+| 1 | 357 | `를` | 8,965 | 0.13% |
+| 2 | 353 | `가` | 8,670 | 0.13% |
+| 3 | 316 | `는` | 8,198 | 0.12% |
+| 4 | 390 | `의` | 7,801 | 0.12% |
+| 5 | 314 | `이` | 7,744 | 0.11% |
+| 6 | 411 | `을` | 6,835 | 0.10% |
+| 7 | 337 | `로` | 6,296 | 0.09% |
+| 8 | 430 | `은` | 5,312 | 0.08% |
+| 9 | 344 | `에` | 5,306 | 0.08% |
+| 10 | 469 | `에서` | 4,868 | 0.07% |
+
+한글 token 비중은 약 7%대로, train corpus의 한글/공백제외 문자 비중과 비슷합니다. 즉 이 실험은 한글 중심 실험이 아니라 영어/코드/LLM 자료 중심의 혼합 corpus 실험입니다. 한글 인식 BPE 권고는 이 표에 더해 한글 전용 validation 또는 Obsidian 한글 subset 결과를 별도로 붙여야 합니다.
+
+## 중간 해석
+
+- Learning rate: 현재 screen-ready 기준 sweet spot은 `2e-4`부터 `3e-4` 근처이며, 지금까지는 `3e-4`가 가장 좋습니다.
+- Context length: 현재 `0.1 epoch` 예산에서는 짧은 context가 앞서며, 특히 `CTX0256`이 강합니다. 다만 이는 예산 민감 신호로 봐야 하고, 긴 context 자체가 나쁘다는 최종 결론은 아닙니다.
+- Vocab size: `6000 -> 8000 -> 10000`은 검증 bits/char만 보면 개선되지만, 동시에 미사용 type과 20회 이하 tail type도 증가합니다. 따라서 현재 결론은 `V10000 유망`이지 `큰 vocab일수록 좋음`이 아닙니다.
+- FFN multiplier: `ffn_mult=3`이 `2`보다 약간 앞서며 효율 후보로 좋습니다. 다만 기본값과 더 큰 FFN 조건은 아직 실행이 필요합니다.
+
+## 다음 의사결정
+
+큐는 백그라운드에서 계속 실행하면 됩니다. 더 빠른 실행 가능한 결론이 목표라면, 모든 탐색 조건 완료를 기다리기보다 현재 상위 후보를 n=10으로 보강하는 쪽이 좋습니다.

@@ -12,40 +12,40 @@
 <text x="922.0" y="137" font-size="14" fill="#0f172a">3.60530</text>
 <text x="48" y="175" font-size="15" font-weight="700" fill="#0f172a">2. CTX0384</text>
 <text x="150" y="175" font-size="13" fill="#64748b">Context Length</text>
-<rect x="250" y="158" width="534.4" height="24" rx="6" fill="#f59e0b" opacity="0.88"/>
-<text x="796.4" y="176" font-size="14" fill="#0f172a">3.71494</text>
-<text x="48" y="214" font-size="15" font-weight="700" fill="#0f172a">3. LR0300</text>
-<text x="150" y="214" font-size="13" fill="#64748b">Learning Rate</text>
-<rect x="250" y="197" width="411.2" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
-<text x="673.2" y="215" font-size="14" fill="#0f172a">3.82250</text>
-<text x="48" y="253" font-size="15" font-weight="700" fill="#0f172a">4. LR0200</text>
+<rect x="250" y="158" width="530.3" height="24" rx="6" fill="#f59e0b" opacity="0.88"/>
+<text x="792.3" y="176" font-size="14" fill="#0f172a">3.71494</text>
+<text x="48" y="214" font-size="15" font-weight="700" fill="#0f172a">3. V12000</text>
+<text x="150" y="214" font-size="13" fill="#64748b">Vocab Size</text>
+<rect x="250" y="197" width="403.9" height="24" rx="6" fill="#10b981" opacity="0.88"/>
+<text x="665.9" y="215" font-size="14" fill="#0f172a">3.82184</text>
+<text x="48" y="253" font-size="15" font-weight="700" fill="#0f172a">4. LR0300</text>
 <text x="150" y="253" font-size="13" fill="#64748b">Learning Rate</text>
-<rect x="250" y="236" width="387.6" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
-<text x="649.6" y="254" font-size="14" fill="#0f172a">3.84309</text>
-<text x="48" y="292" font-size="15" font-weight="700" fill="#0f172a">5. FFN03</text>
-<text x="150" y="292" font-size="13" fill="#64748b">FFN Mult</text>
-<rect x="250" y="275" width="372.5" height="24" rx="6" fill="#8b5cf6" opacity="0.88"/>
-<text x="634.5" y="293" font-size="14" fill="#0f172a">3.85629</text>
-<text x="48" y="331" font-size="15" font-weight="700" fill="#0f172a">6. V10000</text>
-<text x="150" y="331" font-size="13" fill="#64748b">Vocab Size</text>
-<rect x="250" y="314" width="367.9" height="24" rx="6" fill="#10b981" opacity="0.88"/>
-<text x="629.9" y="332" font-size="14" fill="#0f172a">3.86029</text>
-<text x="48" y="370" font-size="15" font-weight="700" fill="#0f172a">7. FFN02</text>
-<text x="150" y="370" font-size="13" fill="#64748b">FFN Mult</text>
-<rect x="250" y="353" width="360.9" height="24" rx="6" fill="#8b5cf6" opacity="0.88"/>
-<text x="622.9" y="371" font-size="14" fill="#0f172a">3.86642</text>
-<text x="48" y="409" font-size="15" font-weight="700" fill="#0f172a">8. LR0150</text>
-<text x="150" y="409" font-size="13" fill="#64748b">Learning Rate</text>
-<rect x="250" y="392" width="336.9" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
-<text x="598.9" y="410" font-size="14" fill="#0f172a">3.88740</text>
-<text x="48" y="448" font-size="15" font-weight="700" fill="#0f172a">9. V08000</text>
-<text x="150" y="448" font-size="13" fill="#64748b">Vocab Size</text>
-<rect x="250" y="431" width="292.0" height="24" rx="6" fill="#10b981" opacity="0.88"/>
-<text x="554.0" y="449" font-size="14" fill="#0f172a">3.92661</text>
-<text x="48" y="487" font-size="15" font-weight="700" fill="#0f172a">10. LR0500</text>
-<text x="150" y="487" font-size="13" fill="#64748b">Learning Rate</text>
-<rect x="250" y="470" width="280.0" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
-<text x="542.0" y="488" font-size="14" fill="#0f172a">3.93704</text>
+<rect x="250" y="236" width="403.1" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
+<text x="665.1" y="254" font-size="14" fill="#0f172a">3.82250</text>
+<text x="48" y="292" font-size="15" font-weight="700" fill="#0f172a">5. LR0200</text>
+<text x="150" y="292" font-size="13" fill="#64748b">Learning Rate</text>
+<rect x="250" y="275" width="378.8" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
+<text x="640.8" y="293" font-size="14" fill="#0f172a">3.84309</text>
+<text x="48" y="331" font-size="15" font-weight="700" fill="#0f172a">6. FFN03</text>
+<text x="150" y="331" font-size="13" fill="#64748b">FFN Mult</text>
+<rect x="250" y="314" width="363.2" height="24" rx="6" fill="#8b5cf6" opacity="0.88"/>
+<text x="625.2" y="332" font-size="14" fill="#0f172a">3.85629</text>
+<text x="48" y="370" font-size="15" font-weight="700" fill="#0f172a">7. V10000</text>
+<text x="150" y="370" font-size="13" fill="#64748b">Vocab Size</text>
+<rect x="250" y="353" width="358.4" height="24" rx="6" fill="#10b981" opacity="0.88"/>
+<text x="620.4" y="371" font-size="14" fill="#0f172a">3.86029</text>
+<text x="48" y="409" font-size="15" font-weight="700" fill="#0f172a">8. FFN02</text>
+<text x="150" y="409" font-size="13" fill="#64748b">FFN Mult</text>
+<rect x="250" y="392" width="351.2" height="24" rx="6" fill="#8b5cf6" opacity="0.88"/>
+<text x="613.2" y="410" font-size="14" fill="#0f172a">3.86642</text>
+<text x="48" y="448" font-size="15" font-weight="700" fill="#0f172a">9. LR0150</text>
+<text x="150" y="448" font-size="13" fill="#64748b">Learning Rate</text>
+<rect x="250" y="431" width="326.4" height="24" rx="6" fill="#3b82f6" opacity="0.88"/>
+<text x="588.4" y="449" font-size="14" fill="#0f172a">3.88740</text>
+<text x="48" y="487" font-size="15" font-weight="700" fill="#0f172a">10. V08000</text>
+<text x="150" y="487" font-size="13" fill="#64748b">Vocab Size</text>
+<rect x="250" y="470" width="280.0" height="24" rx="6" fill="#10b981" opacity="0.88"/>
+<text x="542.0" y="488" font-size="14" fill="#0f172a">3.92661</text>
 <rect x="48" y="535" width="1004" height="48" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
 <text x="70" y="565" font-size="15" fill="#9a3412">해석: 이 순위는 최종 논문 결론이 아니라 다음 반복 보강 대상을 고르는 근거다. claim-ready 반복 수가 아직 0개다.</text>
 </svg>

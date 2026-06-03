@@ -5,12 +5,12 @@
 - 계획된 조건 수: `130`
 - 계획된 분석 행 수: `390`
 - 계획된 실제 실행 수: `354`
-- 완료된 실행 수: `58`
-- 완료된 실제 실행 수: `61`
-- 화면 검토 가능 조건(`탐색 조건 n >= 3`): `19`
+- 완료된 실행 수: `62`
+- 완료된 실제 실행 수: `65`
+- 화면 검토 가능 조건(`탐색 조건 n >= 3`): `20`
 - 주장 근거 가능 조건(`n >= 10`): `0`
 - 전체 실행 결과 원장: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/llm_10x/all_run_results.jsonl`
-- 원장 행 수: `61`
+- 원장 행 수: `65`
 - 원장 누락 감사: `PASS`
 - result.json 읽기 실패: `0`
 - 중복 완료 run_number: `0`
@@ -23,7 +23,7 @@
 
 ## 조건별 요약
 
-| phase | 조건 | 단계 | 축 | 값 | n | 화면 검토 가능 | 주장 가능 | 검증 bits/char 중앙값 | 검증 IQR | 과적합 중앙값 | gap 중앙값 | 시간 h 중앙값 | tok/s 중앙값 | paired delta 중앙값 | 기준선 승률 |
+| phase | 조건 | 단계 | 축 | 값 | n | 화면 검토 가능 | 주장 가능 | 검증 bits/char 중앙값 | 검증 IQR | 과적합 중앙값 | gap 중앙값 | 시간 h 중앙값 | warm tok/s 중앙값 | paired delta 중앙값 | 기준선 승률 |
 | --- | --- | --- | --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | phase1_lr | LR0050 | exploratory | learning_rate | 5e-05 | 3 | yes | no | 4.23066 | 0.026017 | 0 | -0.0667027 | 0.0900198 | 2047.55 | 0.408168 | 0 |
 | phase1_lr | LR0070 | exploratory | learning_rate | 7e-05 | 3 | yes | no | 4.07058 | 0.0471174 | 0 | -0.157885 | 0.0903226 | 2040.69 | 0.248087 | 0 |
@@ -50,11 +50,11 @@
 | phase2_epoch | E1000 | exploratory | epochs | 1000 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase2_epoch | E1200 | exploratory | epochs | 1200 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase2_epoch | E1500 | exploratory | epochs | 1500 | 0 | no | no |  |  |  |  |  |  |  |  |
-| phase3_vocab | V04000 | exploratory | vocab_size | 4000 | 1 | no | no | 4.20008 | 0 | 0 | -0.221544 | 0.0968913 | 2242.88 |  |  |
-| phase3_vocab | V06000 | exploratory | vocab_size | 6000 | 3 | yes | no | 4.07186 | 0.0476026 | 0 | -0.289637 | 0.103867 | 1944.36 |  |  |
-| phase3_vocab | V08000 | exploratory | vocab_size | 8000 | 3 | yes | no | 3.92661 | 0.0509132 | 0 | -0.270098 | 0.0793286 | 2431.07 |  |  |
-| phase3_vocab | V10000 | exploratory | vocab_size | 10000 | 3 | yes | no | 3.86029 | 0.0392103 | 0 | -0.339356 | 0.0996168 | 1884.56 |  |  |
-| phase3_vocab | V12000 | exploratory | vocab_size | 12000 | 0 | no | no |  |  |  |  |  |  |  |  |
+| phase3_vocab | V04000 | exploratory | vocab_size | 4000 | 1 | no | no | 4.20008 | 0 | 0 | -0.221544 | 0.0968913 | 2242.88 | 0.378235 | 0 |
+| phase3_vocab | V06000 | exploratory | vocab_size | 6000 | 3 | yes | no | 4.07186 | 0.0476026 | 0 | -0.289637 | 0.103867 | 1944.36 | 0.251785 | 0 |
+| phase3_vocab | V08000 | exploratory | vocab_size | 8000 | 3 | yes | no | 3.92661 | 0.0509132 | 0 | -0.270098 | 0.0793286 | 2431.07 | 0.0800639 | 0 |
+| phase3_vocab | V10000 | exploratory | vocab_size | 10000 | 3 | yes | no | 3.86029 | 0.0392103 | 0 | -0.339356 | 0.0996168 | 1884.56 | 0.0613315 | 0.333333 |
+| phase3_vocab | V12000 | exploratory | vocab_size | 12000 | 3 | yes | no | 3.82184 | 0.0676903 | 0 | -0.327853 | 0.113235 | 1627.76 |  |  |
 | phase3_vocab | V16000 | exploratory | vocab_size | 16000 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase3_vocab | V20000 | exploratory | vocab_size | 20000 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase3_vocab | V24000 | exploratory | vocab_size | 24000 | 0 | no | no |  |  |  |  |  |  |  |  |
@@ -73,7 +73,7 @@
 | phase4_tokenizer_granularity | MF021 | exploratory | tokenizer_min_frequency | 21 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase4_tokenizer_granularity | MF034 | exploratory | tokenizer_min_frequency | 34 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase4_tokenizer_granularity | MF055 | exploratory | tokenizer_min_frequency | 55 | 0 | no | no |  |  |  |  |  |  |  |  |
-| phase5_capacity | M031 | exploratory | capacity | 31M baseline | 0 | no | no |  |  |  |  |  |  |  |  |
+| phase5_capacity | M031 | exploratory | capacity | 31M baseline | 1 | no | no | 3.82258 | 0 | 0 | -0.32751 | 0.10723 | 1820.48 |  |  |
 | phase5_capacity | M044 | exploratory | capacity | 44M deeper | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase5_capacity | M057 | exploratory | capacity | 57M deepest 512-width | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase5_capacity | M066 | exploratory | capacity | 66M wider | 0 | no | no |  |  |  |  |  |  |  |  |

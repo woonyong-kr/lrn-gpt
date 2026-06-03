@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-csv", type=Path, default=Path("docs/llm_10x/aggregate_summary.csv"))
     parser.add_argument("--meta-json", type=Path, default=Path("docs/llm_10x/aggregate_meta.json"))
     parser.add_argument("--all-results-jsonl", type=Path, default=Path("docs/llm_10x/all_run_results.jsonl"))
-    parser.add_argument("--report", type=Path, default=Path("docs/llm_10x/screen_ready_report.md"))
+    parser.add_argument("--report", type=Path, default=Path("docs/llm_10x/llm_developer_report.md"))
     parser.add_argument("--figures-dir", type=Path, default=Path("docs/llm_10x/llm_developer_figures"))
     parser.add_argument("--cache-dir", type=Path, default=Path("local/llm_10x_isolated/cache"))
     parser.add_argument("--runs-dir", type=Path, default=Path("local/llm_10x_isolated/runs"))
@@ -135,7 +135,9 @@ def enrich_conditions(ready: list[dict[str, Any]], raw_by_condition: dict[str, l
         val_loss = to_float(row.get("final_val_loss_median"))
         val_bpc = to_float(row.get("final_val_bits_per_char_median"))
         elapsed_sec = to_float(row.get("elapsed_sec_median"))
-        tokens_per_sec = to_float(row.get("tokens_per_sec_median"))
+        tokens_per_sec = to_float(row.get("tokens_per_sec_after_warmup_median"))
+        if not (tokens_per_sec == tokens_per_sec):
+            tokens_per_sec = to_float(row.get("tokens_per_sec_median"))
         params = median(metric_list(raw, "parameter_count"))
         tokens_seen = median(metric_list(raw, "tokens_seen"))
         train_bpc = median(metric_list(raw, "final_train_bits_per_char"))
@@ -270,19 +272,19 @@ def plot_throughput_quality(rows: list[dict[str, Any]], output_path: Path) -> No
     plt.figure(figsize=(9.2, 5.6))
     for phase in sorted({str(row.get("phase")) for row in rows}):
         phase_rows = [row for row in rows if str(row.get("phase")) == phase]
-        x = [to_float(row.get("tokens_per_sec_median")) for row in phase_rows]
+        x = [to_float(row.get("tokens_per_sec_median_float")) for row in phase_rows]
         y = [to_float(row.get("final_val_bits_per_char_median")) for row in phase_rows]
         sizes = [max(40, min(150, to_float(row.get("parameter_m_median")) * 2.4)) for row in phase_rows]
         plt.scatter(x, y, s=sizes, color=PHASE_COLORS.get(phase, "#64748b"), alpha=0.82, label=PHASE_LABELS.get(phase, phase))
     for row in sorted(rows, key=lambda item: to_float(item.get("final_val_bits_per_char_median")))[:10]:
         plt.text(
-            to_float(row.get("tokens_per_sec_median")) + 14,
+            to_float(row.get("tokens_per_sec_median_float")) + 14,
             to_float(row.get("final_val_bits_per_char_median")),
             str(row.get("condition_id")),
             fontsize=8,
             color="#334155",
         )
-    plt.xlabel("Median training throughput (tokens/sec)")
+    plt.xlabel("Median warmup-excluded training throughput (tokens/sec)")
     plt.ylabel("Median validation bits/char (lower is better)")
     plt.title("System efficiency vs quality")
     plt.grid(alpha=0.22)
@@ -337,13 +339,24 @@ def create_figures(
     return figures
 
 
+def write_figure_index(figures_dir: Path, figures: dict[str, Path]) -> Path:
+    index_path = figures_dir / "figure_index.md"
+    lines = ["# LLM Metric Figure Index", ""]
+    for key, path in figures.items():
+        if path.exists():
+            lines.append(f"![{key}]({path.name})")
+            lines.append("")
+    index_path.write_text("\n".join(lines), encoding="utf-8")
+    return index_path
+
+
 def phase_summary(condition_rows: list[dict[str, Any]], phase: str) -> dict[str, Any] | None:
     rows = [row for row in condition_rows if str(row.get("phase")) == phase]
     if not rows:
         return None
     best_quality = min(rows, key=lambda row: to_float(row.get("final_val_bits_per_char_median")))
     best_compute = min(rows, key=lambda row: to_float(row.get("quality_compute_product")))
-    fastest = max(rows, key=lambda row: to_float(row.get("tokens_per_sec_median")))
+    fastest = max(rows, key=lambda row: to_float(row.get("tokens_per_sec_median_float")))
     return {"best_quality": best_quality, "best_compute": best_compute, "fastest": fastest, "rows": rows}
 
 
@@ -497,7 +510,7 @@ def write_report(
                     fmt_float(row.get("parameter_m_median"), 1),
                     fmt_float(row.get("tokens_seen_m_median"), 3),
                     fmt_float(row.get("train_flops_proxy_tflop_median"), 1),
-                    fmt_float(row.get("tokens_per_sec_median"), 0),
+                    fmt_float(row.get("tokens_per_sec_median_float"), 0),
                 ]
             )
             + " |"
@@ -543,7 +556,7 @@ def write_report(
         )
         lines.append(
             f"- 처리량 1위: `{fastest.get('condition_id')}`, "
-            f"`{fmt_float(fastest.get('tokens_per_sec_median'), 0)}` tok/s."
+            f"`{fmt_float(fastest.get('tokens_per_sec_median_float'), 0)}` tok/s."
         )
         lines.append(
             f"- 현재 screen-ready 범위: `{rows[0].get('axis_value')}`부터 `{rows[-1].get('axis_value')}`까지, `{len(rows)}` 조건."
@@ -632,6 +645,7 @@ def main() -> None:
         if (diag := tokenizer_diagnostic(args.cache_dir, vocab_size)) is not None
     ]
     figures = create_figures(args.figures_dir, condition_rows, raw_results, tokenizer_diags)
+    figure_index = write_figure_index(args.figures_dir, figures)
     dataset_manifest = read_optional_json(args.dataset_manifest)
     dataset_comparison = read_optional_json(args.dataset_comparison)
     train_stats = text_corpus_stats(args.train_text)
@@ -657,6 +671,7 @@ def main() -> None:
         {
             "report": str(args.report),
             "figures_dir": str(args.figures_dir),
+            "figure_index": str(figure_index),
             "figure_count": len(figures),
             "screen_ready_conditions": len(condition_rows),
             "raw_completed_runs": len(raw_results),
