@@ -227,6 +227,21 @@ baseline 생성 샘플은 수치만으로 보이지 않는 학습 수준을 보�
 
 해석: 깊이를 8층 이상으로 늘릴 때는 epoch와 norm 위치를 같이 조정해야 한다. 10 epoch에서는 post-LN이 좋아 보였지만, 20 epoch에서는 pre-LN이 8층과 12층 모두에서 더 안정적인 final validation loss를 냈다. 특히 12-layer post-LN 붕괴는 깊은 모델에서 post-LN이 현재 설정에 취약하다는 강한 증거다.
 
+다만 위 실험은 `lr=0.0004`, `drop_rate=0.1` 조건이라 깊은 모델에서 과적합과 최적화 불안정이 섞여 있었다. 그래서 `lr=0.0002`, `drop_rate=0.2`, `weight_decay=0.1`로 학습 강도와 정규화를 조정한 후 `8-layer/12-layer x post-LN/pre-LN` 2x2 실험을 다시 수행했다.
+
+![regularized norm depth metric](./docs/HY/figures/62_regularized_norm_depth_metrics.png)
+
+![regularized norm depth curve](./docs/HY/figures/63_regularized_norm_depth_curves.png)
+
+| 실험  | n_layers | norm 위치 | drop_rate | lr     | final_train_loss | final_val_loss | loss_gap | best_val_loss |
+| --- | -------- | ------- | --------- | ------ | ---------------- | -------------- | -------- | ------------- |
+| E60 | 8        | post-LN | 0.2       | 0.0002 | 4.606819         | 5.068817       | 0.461998 | 5.068817      |
+| E61 | 8        | pre-LN  | 0.2       | 0.0002 | 4.895616         | 5.191477       | 0.295861 | 5.191477      |
+| E62 | 12       | post-LN | 0.2       | 0.0002 | 4.569018         | 5.060854       | 0.491836 | 5.060854      |
+| E63 | 12       | pre-LN  | 0.2       | 0.0002 | 4.832398         | 5.142445       | 0.310047 | 5.142445      |
+
+정규화 조건 해석: `drop_rate=0.2`와 낮은 lr을 적용하자 8-layer와 12-layer 모두 gap이 0.5 이하로 내려갔다. 즉 기존 E45/E46/E48에서 보이던 큰 gap은 깊이 자체만의 문제가 아니라 학습 강도와 정규화 설정의 영향을 크게 받았다. 이 조건에서는 post-LN이 pre-LN보다 validation loss가 낮았고, 12-layer post-LN도 더 이상 붕괴하지 않았다. 따라서 “깊은 모델이면 무조건 pre-LN이 낫다”가 아니라, 현재 데이터/규모에서는 `lr`과 `drop_rate`를 안정적으로 잡으면 post-LN도 12-layer까지 학습 가능하다는 결론이 더 정확하다. 다만 pre-LN은 gap이 더 작아 보수적인 일반화 측면에서는 여전히 안정적인 선택이다.
+
 ### 4.6 ffn_multiplier: FFN 내부 계산 공간의 크기
 
 `ffn_multiplier`는 Transformer block의 Feed Forward Network 중간 차원을 `emb_dim`의 몇 배로 키울지 정한다.
@@ -337,6 +352,8 @@ pre-LN : x = x + sublayer(norm(x))
 
 20 epoch 해석: 깊이가 커지고 epoch를 늘리면 결론이 바뀐다. 8-layer에서는 pre-LN이 post-LN보다 final validation loss를 `0.059427` 낮췄고, 12-layer에서는 post-LN이 학습 실패에 가까운 반면 pre-LN은 정상적으로 수렴했다. 따라서 깊은 설정에서는 pre-LN의 안정성 이점이 실제로 나타났다.
 
+정규화 조건 재실험에서는 결론이 다시 보정된다. `drop_rate=0.2`, `lr=0.0002`로 바꾸면 post-LN 8-layer `E60`과 post-LN 12-layer `E62`가 각각 pre-LN `E61`, `E63`보다 validation loss가 낮다. 대신 pre-LN은 두 깊이 모두 train-validation gap이 더 작다. 따라서 `norm_first`는 단독으로 “성능을 올리는 옵션”이라기보다, 깊이, lr, dropout과 함께 최적화 안정성/일반화 성향을 바꾸는 옵션으로 봐야 한다.
+
 ### 4.10 qkv_bias: attention projection의 offset
 
 `qkv_bias`는 attention에서 Query, Key, Value를 만드는 Linear layer에 bias를 둘지 정한다.
@@ -410,10 +427,10 @@ qkv_bias=True : Q = xW + b
 
 1. `n_heads`는 10 epoch 재실험 결과 `n_heads=2`가 가장 좋았고, head 수가 너무 많아지면 head당 차원이 작아져 손해가 났다.
 2. `ffn_multiplier`는 10 epoch 기준 `6`이 가장 좋았지만 개선 폭은 작다. FFN 용량 증가는 효과가 있으나 비용 대비 제한적이다.
-3. `norm_first`는 epoch와 depth에 따라 결론이 달라졌다. 10 epoch에서는 post-LN이 좋아 보였지만, 20 epoch의 8-layer/12-layer 비교에서는 pre-LN이 더 안정적이었다. 특히 12-layer post-LN은 학습 실패에 가까웠다.
+3. `norm_first`는 epoch, depth, lr, dropout에 따라 결론이 달라졌다. 기존 20 epoch 조건에서는 pre-LN이 더 안정적이고 12-layer post-LN은 학습 실패에 가까웠지만, `drop_rate=0.2`, `lr=0.0002`로 정규화한 E60~E63에서는 post-LN이 더 낮은 validation loss를 냈고 pre-LN은 더 작은 gap을 보였다.
 4. `qkv_bias`는 4-layer에서는 효과가 거의 없고 8-layer에서는 악화되어, 현재 실험 우선순위가 낮다.
 5. `weight_tying`은 loss를 더 빨리 줄이는 옵션이 아니다. train loss는 `False`가 더 빨리 줄지만, 50 epoch에서는 과적합이 커졌다. `True`는 파라미터 절감과 장기 일반화 정규화 관점에서 의미 있는 옵션이다.
 6. dropout은 짧은 학습에서는 손해처럼 보이지만, 긴 학습에서는 train-test gap을 줄이는 정규화 역할이 분명하게 나타났다.
 7. activation은 8-layer pre-LN 20 epoch seed 3개 반복에서 GELU가 가장 낮은 평균 validation loss를 냈다. ReLU는 train loss를 더 낮추는 대신 gap이 커졌고, SiLU는 underfit 성향이 컸다.
 
-최종적으로 현재 mini GPT에서는 `context_length=64`, `emb_dim=256`, `n_heads=2`, `ffn_multiplier=6`, `activation=GELU`, `drop_rate=0.1~0.2`, 얕은 10 epoch에서는 `post-LN`, 깊은 20 epoch 이상에서는 `pre-LN`, `weight_tying=True`를 조합 후보로 두고 다시 조합 실험을 진행하는 것이 가장 합리적이다.
+최종적으로 현재 mini GPT에서는 `context_length=64`, `emb_dim=256`, `n_heads=2`, `ffn_multiplier=6`, `activation=GELU`, `drop_rate=0.1~0.2`, `weight_tying=True`를 조합 후보로 두는 것이 합리적이다. 깊은 모델의 LayerNorm 위치는 단순히 pre-LN으로 고정하기보다, 낮은 lr과 충분한 dropout을 적용한 조건에서 post-LN/pre-LN을 함께 비교해야 한다.
