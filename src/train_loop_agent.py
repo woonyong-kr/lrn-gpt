@@ -446,16 +446,16 @@ def choose_hardware_profile(device: str, memory_bytes: int | None) -> str:
 def hardware_baseline(run_id: int, hardware: dict[str, Any]) -> LMExperimentConfig:
     profile = hardware.get("profile", "cpu_small")
     if profile == "cuda_large":
-        return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=80, batch_size=16, emb_dim=192, n_heads=4, n_layers=3, context_length=96)
+        return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=2.0, batch_size=16, emb_dim=192, n_heads=4, n_layers=3, context_length=96)
     if profile == "cuda_balanced":
-        return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=60, batch_size=12, emb_dim=128, n_heads=4, n_layers=2, context_length=64)
+        return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=2.0, batch_size=12, emb_dim=128, n_heads=4, n_layers=2, context_length=64)
     if profile == "mps_balanced":
-        return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=40, batch_size=8, emb_dim=128, n_heads=4, n_layers=2, context_length=64)
+        return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=2.5, batch_size=8, emb_dim=128, n_heads=4, n_layers=2, context_length=64)
     if profile == "mps_small":
-        return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=20, batch_size=4, emb_dim=96, n_heads=4, n_layers=2, context_length=48)
+        return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=1.5, batch_size=4, emb_dim=96, n_heads=4, n_layers=2, context_length=48)
     if profile == "cpu_balanced":
-        return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=20, batch_size=4, emb_dim=96, n_heads=4, n_layers=2, context_length=48)
-    return LMExperimentConfig(run_id=run_id, hypothesis="", max_steps=10, batch_size=2, emb_dim=64, n_heads=4, n_layers=1, context_length=32)
+        return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=1.5, batch_size=4, emb_dim=96, n_heads=4, n_layers=2, context_length=48)
+    return LMExperimentConfig(run_id=run_id, hypothesis="", epochs=1.0, batch_size=2, emb_dim=64, n_heads=4, n_layers=1, context_length=32)
 
 
 def choose_next_experiment(run_id: int, leaderboard_rows: list[dict[str, str]], hardware: dict[str, Any]) -> ExperimentPlan:
@@ -1107,6 +1107,9 @@ def write_dashboard(summary_rows: list[dict[str, Any]]) -> None:
 
 def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, Any], hardware: dict[str, Any], corpus_path: Path, artifact_dir: Path, best_row: dict[str, Any] | None, visual_paths: dict[str, Path] | None = None) -> None:
     config = plan.config
+    display_config = asdict(config)
+    if display_config.get("epochs") is not None:
+        display_config.pop("max_steps", None)
     best_line = "없음" if best_row is None else f"run {best_row.get('run_id')} / val={best_row.get('final_val_loss')} / status={best_row.get('fit_status')}"
     latest_visual = "run_metrics.svg"
     trend_visual = "../visuals/loss_overfit_trends.svg"
@@ -1142,7 +1145,7 @@ def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, 
 ## 실험 설정
 
 ```json
-{json.dumps(asdict(config), ensure_ascii=False, indent=2)}
+{json.dumps(display_config, ensure_ascii=False, indent=2)}
 ```
 
 ## 학습 길이
@@ -1151,7 +1154,7 @@ def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, 
 | --- | --- |
 | epochs | {result.get("epochs")} |
 | steps_per_epoch | {result.get("steps_per_epoch")} |
-| effective max_steps | {result.get("max_steps")} |
+| effective updates | {result.get("max_steps")} |
 
 ## 실행 환경
 
@@ -1177,7 +1180,7 @@ def write_run_report(report_path: Path, plan: ExperimentPlan, result: dict[str, 
 | fit_status | {result.get("fit_status")} |
 | epochs | {result.get("epochs")} |
 | steps_per_epoch | {result.get("steps_per_epoch")} |
-| effective max_steps | {result.get("max_steps")} |
+| effective updates | {result.get("max_steps")} |
 | parameter_count | {result.get("parameter_count")} |
 | tokens_per_sec | {result.get("tokens_per_sec")} |
 | elapsed_sec | {result.get("elapsed_sec")} |

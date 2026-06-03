@@ -185,6 +185,7 @@ epoch horizon 단계, runs 101-111:
 ## 9. 이번 정리에서 반영한 운영 변경
 
 - `src/train_loop_agent.py`: 새 plan schema가 `max_steps`를 허용하지 않도록 변경했다.
+- `src/train_loop_agent.py`: rule-based hardware baseline도 새 실험에서는 `epochs`를 명시하도록 변경했다.
 - `docs/train/next_plan.schema.json`: `config_overrides.allowed_keys`에서 `max_steps`를 제거했다.
 - `docs/train/next_plan.json`: 대기 중인 run 112 계획에서 `max_steps` 입력을 제거하고 `epochs`만 남겼다.
 - heartbeat 자동화: 다음 실험 계획 작성 시 `epochs`만 authored training-length knob으로 사용하도록 업데이트했다.
