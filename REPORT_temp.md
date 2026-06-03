@@ -1,675 +1,663 @@
-# mini GPT 구현 및 LLM 하이퍼파라미터 실험 보고서 - LLM 지표 수정본
+# REPORT.md HY 실험 재로깅 및 LLM 지표 그래프 갱신 지시서
 
-이 문서는 원본 `REPORT.md`를 수정하지 않고 작성한 대체 초안입니다. 원본 보고서의 실험 흐름은 유지하되, 결론의 기준을 실제 LLM 개발자가 보는 지표 체계로 바꿉니다.
+이 문서는 원본 `REPORT.md`를 수정하지 않고, `REPORT.md`를 LLM 개발자 관점의 지표와 그래프로 다시 작성하기 위한 작업 지시서다.
 
-핵심 변경은 네 가지입니다.
+작업자는 `REPORT.md`에 이미 들어간 HY/NSMC 실험을 기준으로 실험 로그를 다시 찍고, 그 로그에서 순차 선형 그래프를 다시 만들고, 최종 해석을 갱신해야 한다.
 
-1. `final_val_loss` 중심 해석을 `bits/char`, `best/final rebound`, `train-val gap`, `compute proxy` 중심으로 바꿉니다.
-2. `vocab_size` 실험은 token-level loss와 문자 기준 정규화 지표를 분리합니다.
-3. `epoch`, `dropout`, `weight_tying`, `norm_first`는 final loss 한 점이 아니라 `best_val_loss`, `final_minus_best_val_loss`, `final_generalization_gap`을 함께 봅니다.
-4. seed 반복이 있는 실험은 평균과 표준편차 또는 IQR을 기준으로만 주장합니다.
+## 0. 절대 기준
 
-## 0. 팀 정보
+- `REPORT.md`는 원본으로 보존한다.
+- 이번 작업의 기준 실험은 `REPORT.md`와 `docs/HY/testresult/*.md`에 등장하는 E00~E63 HY 실험이다.
+- `docs/llm_10x/*`는 이번 REPORT 재작성 기준이 아니다. 10x 결과를 섞어서 결론을 쓰지 않는다.
+- final loss 한 점만 모은 막대/산점도는 보조 자료로만 사용한다.
+- 본문 결론은 반드시 `epoch`, `step`, `tokens_seen`에 따른 순차 선형 그래프에서 나온다.
+- 기존 로그에 필요한 지표가 없으면 해당 REPORT 실험을 같은 config/seed/split로 다시 실행해 로그를 보강한다.
+- tokenizer가 다른 실험은 token-level loss로 직접 비교하지 않는다. vocab 실험의 primary metric은 `bits/char`다.
+- "과적합이 없다"는 주장은 train loss 하락 여부가 아니라 `train-val gap`, `best-final rebound`, `val_bits_per_char` 곡선으로 판단한다.
 
-| 항목 | 내용 |
+## 1. 대상 실험 매니페스트
+
+먼저 `REPORT.md`에서 언급한 모든 실험을 매니페스트로 고정한다.
+
+생성 파일:
+
+```text
+docs/HY/llm_relog/experiment_manifest.csv
+```
+
+필수 컬럼:
+
+```text
+experiment_id,source_md,report_section,comparison_group,baseline_id,
+changed_variable,changed_value,seed,vocab_size,context_length,emb_dim,
+n_heads,n_layers,ffn_mult,activation,drop_rate,norm_first,qkv_bias,
+weight_tying,stride,num_epochs,batch_size,lr,weight_decay,
+rerun_required,rerun_reason
+```
+
+대상 실험군은 아래를 빠뜨리지 않는다.
+
+| REPORT 축 | 기준/비교 실험 |
 | --- | --- |
-| 과정 | AI 과정 |
-| 팀명 | Week13/14 Team6 |
-| 팀원 | 최우녕, 이창원, 이혜연 |
+| 5 epoch baseline | E00 |
+| context_length | E01, E00, E02, E03 |
+| vocab_size | E04, E00, E05, E06 |
+| emb_dim | E07, E00, E08 |
+| 초기 n_heads 5ep | E09, E00, E10 |
+| n_layers 5ep | E11, E00, E12, E13 |
+| ffn_multiplier 5ep | E14, E00, E15 |
+| drop_rate 5ep | E16, E17, E00, E18 |
+| qkv_bias 5ep | E00, E19 |
+| weight_tying 5ep | E00, E20 |
+| 10 epoch baseline | E28 |
+| activation 10ep | E25, E28, E26 |
+| norm_first 10ep | E28, E27 |
+| stride 10ep | E28, E29 |
+| n_heads 10ep | E31, E32, E28, E33, E34 |
+| ffn_multiplier 10ep | E35, E28, E36 |
+| depth/norm 10ep | E28, E37, E38 |
+| qkv_bias 10ep | E28, E39, E37, E40 |
+| weight_tying 10/20/50ep | E28, E41, E42, E43, E44 |
+| long dropout 20ep | E21, E22, E23, E24 |
+| depth/norm 20ep | E23, E45, E46, E47, E48 |
+| activation seed 반복 | E49, E50, E51, E52, E53, E54, E55, E56, E57 |
+| regularized depth/norm | E60, E61, E62, E63 |
 
-## 1. 보고서 목적
+매니페스트 검증 규칙:
 
-이 보고서는 직접 구현한 mini GPT 모델에서 Transformer 기반 LLM 하이퍼파라미터가 사전학습 품질, tokenizer 효율, 학습 안정성, 과적합, 계산 비용에 어떤 영향을 주는지 확인하기 위한 실험 보고서입니다.
+- `REPORT.md`에 언급된 실험 ID가 매니페스트에 없으면 실패다.
+- 매니페스트에 있는 실험의 `source_md`가 없으면 실패다.
+- `source_md`에 step별 CSV가 없거나 LLM 지표 계산에 필요한 `train_chars`, `val_chars`, `train_tokens`, `val_tokens`, `parameter_count`, `tokens_seen`이 없으면 `rerun_required=True`로 둔다.
+- 재실행이 필요한 실험은 기존 REPORT config와 seed를 그대로 복원한다.
 
-원본 보고서는 `validation loss` 중심의 하이퍼파라미터 실험 보고서로는 충분히 의미가 있습니다. 다만 LLM 개발자 관점에서는 다음 문제가 남아 있습니다.
+## 2. 로그 재기록 산출물
 
-- tokenizer가 다른 vocab 실험을 token-level loss만으로 비교했습니다.
-- final checkpoint만 강조되어 best checkpoint와 후반 rebound가 충분히 분리되지 않았습니다.
-- 모델 크기와 학습량이 바뀌는 실험에서 `parameter_count`, `tokens_seen`, `compute_proxy`가 결론 축으로 충분히 쓰이지 않았습니다.
-- 일부 실험은 seed 반복이 없거나 n=3 단계라 최종 주장으로 쓰기 어렵습니다.
-
-따라서 이 수정본은 기존 실험 결과를 버리는 것이 아니라, 같은 결과를 LLM 지표로 다시 읽는 문서입니다.
-
-## 2. 구현 및 테스트 현황
-
-| 단계 | 구현 내용 | 구현 파일 |
-| --- | --- | --- |
-| 1 | UTF-8 byte-level BPE tokenizer | `src/bpe.py` |
-| 2 | GPTDataset, DataLoader, token/position embedding | `src/dataset.py`, `src/embeddings.py` |
-| 3 | MultiHeadAttention, causal mask | `src/attention.py` |
-| 4 | LayerNorm, GELU/ReLU/SiLU, FeedForward, TransformerBlock, GPTModel | `src/model.py` |
-| 5 | loss 계산, generation, checkpoint, training utility | `src/train.py` |
-| 6 | NSMC 감성 분류 Dataset과 classifier | `src/finetune.py` |
-| 7 | 실험 실행 및 Markdown 결과 저장 루프 | `scripts/run_lm_experiment.py`, `scripts/run_all_lm_experiments.py`, `scripts/run_followup_experiments.py` |
-| 8 | HY 지표 재해석 및 그래프 생성 | `scripts/generate_llm_metric_reinterpretation.py` |
-| 9 | 10x tokenizer/profile/run/aggregate/report | `scripts/llm_10x_*.py` |
-
-기존 HY 실험 결과는 아래 경로에 있습니다.
-
-```text
-docs/HY/testresult/*.md
-docs/HY/figures/*.png
-docs/HY/figures_temp/*.png
-docs/HY/report_llm_metrics.csv
-```
-
-10배 데이터 실험 결과는 아래 경로에 있습니다.
+각 실험은 아래 구조로 다시 저장한다.
 
 ```text
-docs/llm_10x/*.md
-docs/llm_10x/aggregate_summary.csv
-docs/llm_10x/all_run_results.jsonl
-docs/llm_10x/llm_developer_figures/*.png
+docs/HY/llm_relog/runs/{experiment_id}/config.json
+docs/HY/llm_relog/runs/{experiment_id}/tokenizer_profile.json
+docs/HY/llm_relog/runs/{experiment_id}/history.jsonl
+docs/HY/llm_relog/runs/{experiment_id}/metrics.json
+docs/HY/llm_relog/runs/{experiment_id}/samples.jsonl
+docs/HY/llm_relog/runs/{experiment_id}/result.md
 ```
 
-## 3. 실험 기준
-
-### 3.1 HY / NSMC 기준
-
-| 항목 | 내용 |
-| --- | --- |
-| 원본 데이터 | NSMC |
-| 사전학습 데이터 | `data/nsmc_lm_train.txt`, `data/nsmc_lm_val.txt` |
-| tokenizer | 직접 구현한 UTF-8 byte-level BPE |
-| baseline vocab_size | 3000 |
-| baseline train_tokens | 805,021 |
-| baseline val_tokens | 70,386 |
-| seed | 123 |
-| GPU | NVIDIA GeForce RTX 5070 Ti |
-
-5 epoch baseline `E00`:
-
-| 항목 | 값 |
-| --- | ---: |
-| vocab_size | 3000 |
-| context_length | 128 |
-| emb_dim | 192 |
-| n_heads | 4 |
-| n_layers | 4 |
-| ffn_multiplier | 4 |
-| activation | GELU |
-| drop_rate | 0.1 |
-| qkv_bias | False |
-| weight_tying | False |
-| norm_first | False, post-LN |
-| parameter_count | 2,954,112 |
-| batch_size | 32 |
-| lr | 0.0004 |
-| weight_decay | 0.1 |
-| final_train_loss | 5.081426 |
-| final_val_loss | 5.301974 |
-
-10 epoch baseline `E28`는 같은 구조에서 `num_epochs=10`이며 `final_train_loss=4.619696`, `final_val_loss=5.102722`입니다.
-
-### 3.2 LLM 10x 기준
-
-10x 실험은 HY/NSMC 실험과 데이터, tokenizer, 모델 크기, seed policy가 다르므로 한 leaderboard에서 직접 순위 비교하지 않습니다.
-
-| 항목 | 값 |
-| --- | --- |
-| train | `data/obsidian_llm_10x_lm_train.txt` |
-| val | `data/obsidian_llm_10x_lm_val.txt` |
-| source size | 약 15,001,711 chars class |
-| vocab_size | 12000 |
-| tokenizer_min_frequency | 2 |
-| context_length | 512 |
-| batch_size | 4 |
-| emb_dim | 512 |
-| n_heads | 8 |
-| n_layers | 8 |
-| drop_rate | 0.10 |
-| ffn_mult | 4 |
-| activation_name | gelu |
-| attention_impl | sdpa |
-| qkv_bias | False |
-| tie_embeddings | True |
-| learning_rate | 0.0003 |
-| weight_decay | 0.05 |
-| grad_clip | 1.0 |
-| target epochs | 50 |
-
-10x claim rule:
-
-| 반복 수 | 상태 | 허용되는 표현 |
-| ---: | --- | --- |
-| n=3 | screen-ready | 후보, 탈락 후보, 추가 반복 대상 |
-| n=10 | claim-ready | 최종 주장 가능 |
-
-현재 10x 중간 결과는 claim-ready가 아니라 다음 실험 우선순위를 정하는 screen-ready evidence로 해석합니다.
-
-## 4. LLM 지표 정의와 해석 규칙
-
-### 4.1 핵심 지표
-
-| 지표 | 계산식 | 의미 | 무엇을 봐야 하나 | 해석 |
-| --- | --- | --- | --- | --- |
-| `final_train_loss` | final train CE | 학습 데이터 token 예측 손실 | val과 같이 본다 | 낮아지는데 val이 안 따라오면 memorization 가능성 |
-| `final_val_loss` | final validation CE | validation token 예측 손실 | 같은 tokenizer끼리 비교 | vocab이 다르면 단독 비교 금지 |
-| `final_val_nats_per_char` | `final_val_loss * val_tokens / val_chars` | 문자당 nats | vocab/BPE 비교 primary | 낮을수록 tokenizer 차이를 보정한 LM 품질이 좋다 |
-| `final_val_bits_per_char` | `final_val_nats_per_char / ln(2)` | 문자당 bits | 보고서용 tokenizer 공정 비교 | 낮을수록 문자 기준 정보량이 작다 |
-| `tokens_per_char` | `tokens / chars` | tokenizer가 text를 얼마나 잘게 쪼개는지 | vocab sweep에서 필수 | 낮으면 token 수는 줄지만 rare token 난이도가 커질 수 있다 |
-| `chars_per_token` | `chars / tokens` | token 하나의 평균 문자 길이 | token 길이 scale 확인 | 너무 커지면 긴 rare token 학습 부족 가능성 |
-| `actual_vocab_size` | tokenizer 실제 vocab 수 | corpus가 vocab을 채웠는지 | requested vocab과 비교 | 너무 작으면 vocab_size 실험이 성립하지 않음 |
-| `bpe_merge_count` | 실제 merge rule 수 | BPE 병합 정도 | min_frequency/vocab sweep | merge가 적으면 큰 vocab 요청이 무의미할 수 있음 |
-| `token_length_histogram` | token string length 분포 | 긴 token/짧은 token 비율 | tokenizer profile | 긴 token이 많고 val bits가 나쁘면 sparse token 문제 |
-| `top_50_merge_rules` | 상위 merge pair | tokenizer가 무엇을 묶는지 | qualitative audit | 의미 없는 병합이 많으면 tokenizer quality 의심 |
-| `final_generalization_gap` | `final_val_loss - final_train_loss` | train/val 일반화 차이 | 장기 학습/dropout/tying | 커질수록 memorization 가능성 |
-| `generalization_gap_delta` | final gap - initial gap | 학습 중 gap 증가량 | epoch sweep | 크면 학습하면서 외우는 쪽으로 감 |
-| `train_val_improvement_gap` | train 개선량 - val 개선량 | train만 더 빨리 좋아졌는지 | overfit risk | 크면 train fitting이 val generalization보다 앞섬 |
-| `overfit_score` | positive gap/delta/improvement 합 | 과적합 종합 신호 | 후보 guardrail | 낮을수록 안전 |
-| `best_val_loss` | 학습 중 최소 val loss | 가장 좋은 checkpoint | final과 같이 비교 | final보다 낮으면 early stopping 후보 |
-| `best_tokens_seen` | best 시점까지 본 token 수 | best checkpoint 학습량 | epoch/tokens_seen 비교 | epoch보다 공정한 비교 단위 |
-| `final_minus_best_val_loss` | `final_val_loss - best_val_loss` | 후반 rebound | 장기 학습 필수 | 크면 final checkpoint를 쓰면 안 됨 |
-| `tokens_seen` | train input token 누적 | 전체 학습량 | epoch 대신 비교 | tokenizer/batch/context가 다르면 필수 |
-| `estimated_chars_seen` | `tokens_seen * train_chars_per_token` | raw text 노출량 근사 | vocab 비교 보조 | token scale 차이를 보정 |
-| `parameter_count` | trainable params | 모델 크기 | capacity 실험 | 같은 quality면 작을수록 효율적 |
-| `compute_proxy` | `parameter_count * tokens_seen` | 비용 근사 | loss-vs-compute | 작은 실험의 FLOPs proxy |
-| `estimated_train_flops` | `6 * parameter_count * tokens_seen` | 대략 학습 FLOPs | compute 보고 | 정확 FLOPs가 아님을 명시 |
-| `tokens_per_param` | `tokens_seen / parameter_count` | 데이터/모델 비율 | data sufficiency | 너무 작으면 과적합 위험 |
-| `tokens_per_sec_after_warmup` | warmup 이후 train throughput | 순수 학습 속도 | context/depth/capacity | 전체 elapsed보다 처리량 비교에 적합 |
-| `seed_mean`, `seed_std`, `IQR` | seed 평균/분산 | 재현성 | activation/norm/dropout | 평균 차이가 std보다 작으면 inconclusive |
-| `paired_delta_to_baseline` | 같은 seed 조건 - baseline | baseline 대비 효과 | phase별 paired comparison | seed variance를 줄여 해석 |
-| `baseline_win_rate` | baseline보다 나은 seed 비율 | seed별 승률 | 후보 선별 | n=3이면 최소 2승 필요 |
-| `distinct_1`, `distinct_2` | unique ngram / total ngram | 생성 다양성 | generation audit | 낮으면 반복 생성 |
-| `repetition_ratio_3gram` | 반복 3gram 비율 | 반복/붕괴 정도 | loss와 함께 확인 | 높으면 loss 개선만으로 채택 금지 |
-
-### 4.2 결론 라벨
-
-각 실험 결론은 아래 네 가지 중 하나로 끝냅니다.
-
-| 라벨 | 의미 |
-| --- | --- |
-| `confirmed` | primary metric이 개선되고 guardrail도 안정적이며 seed variance보다 효과가 큼 |
-| `trade-off` | 품질은 개선되지만 비용, gap, rebound, throughput 중 하나가 악화됨 |
-| `inconclusive` | 효과가 seed variance보다 작거나 반복 수가 부족함 |
-| `rejected` | primary metric과 guardrail이 모두 악화되거나 비용 대비 이득이 없음 |
-
-## 5. Vocab Size: 결론이 바뀌는 핵심 실험
-
-질문: vocab 크기가 커질 때 언어 모델 품질이 좋아지는가, 아니면 token 단위가 바뀌어 loss 해석만 달라지는가?
-
-고정 조건: NSMC train/validation split, seed `123`, 5 epoch, baseline 구조는 `E00`과 동일합니다.
-
-바꾼 변수: `vocab_size`
-
-Primary metric: tokenizer가 다르므로 `final_val_bits_per_char`
-
-Guardrail metric: `parameter_count`, `tokens_per_sec`, `actual_vocab_size`, `bpe_merge_count`, `token_length_histogram`
-
-![vocab loss vs bits per char](docs/HY/figures_temp/vocab_loss_vs_bits_per_char.png)
-
-해석: token-level loss 기준 best와 bits/char 기준 best가 다르므로, vocab 결론은 두 기준을 분리해야 합니다.
-
-| 실험 | vocab_size | parameter_count | val_tokens_per_char | val_chars_per_token | final_val_loss | final_val_bits_per_char | tokens_per_sec |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| E04 | 2000 | 2,570,112 | 0.6527 | 1.5322 | 4.8114 | 4.5304 | 195,011.7 |
-| E00 | 3000 | 2,954,112 | 0.5838 | 1.7128 | 5.3020 | 4.4658 | 195,309.5 |
-| E05 | 4000 | 3,338,112 | 0.5444 | 1.8369 | 5.6384 | 4.4285 | 195,553.1 |
-| E06 | 5000 | 3,722,112 | 0.5184 | 1.9292 | 5.8825 | 4.3991 | 188,826.1 |
-
-결과:
-
-- `final_val_loss` 기준으로는 E04, vocab 2000이 가장 낮습니다.
-- `final_val_bits_per_char` 기준으로는 E06, vocab 5000이 가장 낮습니다.
-- vocab이 커질수록 `val_tokens_per_char`가 내려가므로 같은 문장을 더 적은 token으로 표현합니다.
-- 그러나 LM head 크기와 rare token 비용이 같이 증가합니다.
-
-결론: `trade-off`
-
-원본 보고서에서 `vocab_size=2000이 가장 좋다`라고 읽힐 수 있는 문장은 수정해야 합니다. 더 정확한 결론은 아래입니다.
+집계 파일:
 
 ```text
-token-level final_val_loss 기준 best는 vocab_size=2000이다.
-하지만 tokenizer가 달라지면 token loss 직접 비교는 불공정하다.
-문자당 정보량인 final_val_bits_per_char 기준 best는 vocab_size=5000이다.
-따라서 vocab 실험은 "2000이 최고"가 아니라 "token loss best와 문자 기준 best가 다르며, tokenizer 효율과 sparse token/비용 trade-off가 있다"로 해석한다.
+docs/HY/llm_relog/report_llm_metrics.csv
+docs/HY/llm_relog/report_llm_metrics_by_step.csv
+docs/HY/llm_relog/report_llm_summary_by_condition.csv
 ```
 
-다음 vocab 실험은 모델 학습 전에 tokenizer-only profile을 먼저 만듭니다.
+### 2.1 `history.jsonl` 필수 필드
+
+`history.jsonl`은 evaluation 시점마다 한 줄씩 기록한다. epoch final만 기록하면 안 된다.
+
+```json
+{
+  "experiment_id": "E34",
+  "epoch": 10,
+  "step": 1960,
+  "tokens_seen": 8028160,
+  "estimated_chars_seen": 13794860.0,
+  "train_loss": 4.633036,
+  "val_loss": 5.122543,
+  "test_loss": 5.122543,
+  "train_nats_per_char": 2.7041,
+  "val_nats_per_char": 2.9907,
+  "train_bits_per_char": 3.9012,
+  "val_bits_per_char": 4.3146,
+  "train_val_gap": 0.489507,
+  "best_val_loss_so_far": 5.122543,
+  "best_val_bits_per_char_so_far": 4.3146,
+  "val_loss_minus_best_so_far": 0.0,
+  "lr": 0.0004,
+  "grad_norm": 1.160649,
+  "elapsed_sec": 41.1085,
+  "tokens_per_sec": 195291.946,
+  "tokens_per_sec_after_warmup": 195291.946,
+  "parameter_count": 2954112,
+  "compute_proxy_param_tokens": 23716083793920,
+  "estimated_train_flops": 142296502763520
+}
+```
+
+### 2.2 `metrics.json` 필수 필드
+
+`metrics.json`은 run 전체의 요약이다.
+
+```json
+{
+  "experiment_id": "E34",
+  "seed": 123,
+  "final_step": 1960,
+  "final_epoch": 10,
+  "final_tokens_seen": 8028160,
+  "final_train_loss": 4.633036,
+  "final_val_loss": 5.122543,
+  "final_val_bits_per_char": 4.314626,
+  "best_step": 1960,
+  "best_epoch": 10,
+  "best_tokens_seen": 8028160,
+  "best_val_loss": 5.122543,
+  "best_val_bits_per_char": 4.314626,
+  "final_minus_best_val_loss": 0.0,
+  "final_minus_best_val_bits_per_char": 0.0,
+  "final_generalization_gap": 0.489507,
+  "gap_slope_last_quarter": 0.0,
+  "overfit_score": 0.0,
+  "parameter_count": 2954112,
+  "tokens_per_parameter": 2.718,
+  "compute_proxy_param_tokens": 23716083793920,
+  "estimated_train_flops": 142296502763520,
+  "tokens_per_sec_after_warmup": 195291.946
+}
+```
+
+### 2.3 `tokenizer_profile.json` 필수 필드
+
+vocab 실험은 tokenizer 자체가 바뀌므로 tokenizer profile을 반드시 저장한다.
+
+```json
+{
+  "requested_vocab_size": 5000,
+  "actual_vocab_size": 5000,
+  "bpe_merge_count": 4744,
+  "special_token_count": 0,
+  "train_chars": 1379486,
+  "val_chars": 120560,
+  "train_tokens": 712949,
+  "val_tokens": 62493,
+  "train_tokens_per_char": 0.5168,
+  "val_tokens_per_char": 0.5184,
+  "train_chars_per_token": 1.9347,
+  "val_chars_per_token": 1.9292,
+  "token_length_histogram": {"1": 112, "2": 1800, "3": 2100},
+  "top_50_merge_rules": [["영", "화"], ["재", "미"]],
+  "byte_fallback_ratio": 0.0
+}
+```
+
+## 3. LLM 전문 지표 정의
+
+아래 지표는 코드에 계산 로직을 추가하고 모든 결과 표/그래프에서 같은 이름으로 사용한다.
+
+| 지표 | 계산식 | 의미 | 해석 기준 |
+| --- | --- | --- | --- |
+| `tokens_per_char` | `token_count / char_count` | tokenizer가 문자를 얼마나 잘게 쪼개는지 | 낮을수록 같은 텍스트를 적은 token으로 표현한다 |
+| `chars_per_token` | `char_count / token_count` | token 하나의 평균 raw text 길이 | 커질수록 긴 token/희소 token 위험이 생긴다 |
+| `nats_per_char` | `token_loss * tokens_per_char` | 문자당 negative log likelihood | tokenizer가 다른 실험 비교의 기본 단위 |
+| `bits_per_char` | `nats_per_char / ln(2)` | 문자당 정보량 | vocab 실험의 primary metric |
+| `best_val_loss` | `min(val_loss)` | 가장 좋은 checkpoint | final보다 중요할 수 있다 |
+| `best_val_bits_per_char` | `min(val_bits_per_char)` | 문자 기준 best checkpoint | vocab/토큰화 비교에 사용 |
+| `final_minus_best_val_loss` | `final_val_loss - best_val_loss` | 후반 rebound | 크면 마지막 checkpoint가 과적합/퇴화했다 |
+| `final_generalization_gap` | `final_val_loss - final_train_loss` | train/validation 차이 | 장기 학습과 dropout에서 핵심 |
+| `gap_slope_last_quarter` | 마지막 25% step의 gap 기울기 | gap이 후반에 커지는지 | 양수면 과적합 위험 증가 |
+| `tokens_seen` | 학습 중 누적 token | 학습량 | epoch보다 공정한 x축 |
+| `estimated_chars_seen` | `tokens_seen * train_chars_per_token` | raw text 노출량 근사 | vocab이 다른 경우 보조 x축 |
+| `parameter_count` | trainable parameter 수 | 모델 용량 | capacity 실험의 비용 축 |
+| `compute_proxy_param_tokens` | `parameter_count * tokens_seen` | 간단한 compute proxy | loss-vs-compute 그래프 x축 |
+| `estimated_train_flops` | `6 * parameter_count * tokens_seen` | 대략 학습 FLOPs | 정확 FLOPs가 아닌 비교용 근사 |
+| `tokens_per_parameter` | `tokens_seen / parameter_count` | 데이터/모델 비율 | 작으면 데이터 부족/과적합 위험 |
+| `tokens_per_sec_after_warmup` | warmup 제외 평균 throughput | 처리량 | context/depth/ffn 비용 비교 |
+| `seed_mean`, `seed_std`, `seed_iqr` | seed 반복 통계 | 재현성 | 평균 차이가 std보다 작으면 주장 금지 |
+| `paired_delta_to_baseline` | 같은 seed에서 조건 - baseline | baseline 대비 효과 | seed variance를 줄여 비교한다 |
+
+## 4. 코드 수정 요구사항
+
+기존 runner가 없거나 현재 repo 이름과 다르면 새 script를 만들고 아래 기능을 구현한다.
+
+필수 script:
 
 ```text
-vocab_size = [4000, 6000, 8000, 10000, 12000, 16000, 20000, 24000, 32000, 40000, 48000, 56000, 64000]
-tokenizer_min_frequency = [1, 2, 3, 4, 5, 8, 13, 21, 34, 55]
-train/val split fixed
-tokenizer trained on train only
+scripts/hy_llm_relog_manifest.py
+scripts/run_hy_llm_relog.py
+scripts/aggregate_hy_llm_relog.py
+scripts/generate_hy_llm_seq_figures.py
+scripts/render_report_temp_from_hy_llm_metrics.py
+scripts/verify_hy_llm_report_assets.py
 ```
 
-볼 것:
+권장 실행 순서:
 
-- `actual_vocab_size`가 requested vocab을 따라가는가?
-- `tokens_per_char`가 줄어드는가?
-- `chars_per_token`이 너무 커져 rare token이 늘어나는가?
-- `top_50_merge_rules`가 의미 있는 병합을 하는가?
+```bash
+python scripts/hy_llm_relog_manifest.py \
+  --report REPORT.md \
+  --source docs/HY/testresult \
+  --out docs/HY/llm_relog/experiment_manifest.csv
 
-## 6. Context Length
+python scripts/run_hy_llm_relog.py \
+  --manifest docs/HY/llm_relog/experiment_manifest.csv \
+  --out docs/HY/llm_relog/runs \
+  --seed-policy fixed
 
-질문: 더 긴 context가 validation 품질을 높이는가, 아니면 짧은 리뷰 corpus에서는 sample 수와 학습 밀도 손실이 더 큰가?
+python scripts/aggregate_hy_llm_relog.py \
+  --runs docs/HY/llm_relog/runs \
+  --out docs/HY/llm_relog
 
-고정 조건: NSMC, vocab 3000, baseline model, 5 epoch, seed 123
+python scripts/generate_hy_llm_seq_figures.py \
+  --metrics docs/HY/llm_relog/report_llm_metrics.csv \
+  --history docs/HY/llm_relog/report_llm_metrics_by_step.csv \
+  --out docs/HY/figures_llm_seq
 
-바꾼 변수: `context_length`
+python scripts/render_report_temp_from_hy_llm_metrics.py \
+  --report REPORT.md \
+  --metrics docs/HY/llm_relog/report_llm_metrics.csv \
+  --history docs/HY/llm_relog/report_llm_metrics_by_step.csv \
+  --figures docs/HY/figures_llm_seq \
+  --out REPORT_temp.md
 
-Primary metric: `final_val_bits_per_char`
+python scripts/verify_hy_llm_report_assets.py \
+  --report REPORT_temp.md \
+  --figures docs/HY/figures_llm_seq
+```
 
-Guardrail metric: `tokens_per_sec`, `compute_proxy`, train/val gap
+runner는 기존 HY 실험 config를 그대로 복원해야 한다. 실험을 새로 설계하지 말고, `REPORT.md`에 있는 실험을 같은 조건으로 재실행한다.
 
-| 실험 | context_length | stride | final_val_loss | final_val_bits_per_char | tokens_per_sec | compute_proxy |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| E01 | 64 | 64 | 5.1461 | 4.3344 | 102,490.4 | 1.184e13 |
-| E00 | 128 | 128 | 5.3020 | 4.4658 | 195,309.5 | 1.186e13 |
-| E02 | 192 | 192 | 5.3886 | 4.5388 | 288,413.6 | 1.194e13 |
-| E03 | 256 | 256 | 5.4470 | 4.5879 | 340,329.1 | 1.196e13 |
+seed 규칙:
 
-결론: `confirmed` within this dataset
+- 기존 REPORT 재현 run은 seed를 원래 값으로 고정한다. 기본은 `123`.
+- seed 반복이 이미 있는 activation 실험은 `42`, `123`, `2026`을 유지한다.
+- 최종 주장으로 바꾸고 싶은 축은 같은 조건으로 `42`, `123`, `2026` 세 seed를 추가한다.
+- seed가 다르면 같은 그래프에 옅은 개별 선을 그리고, 평균은 굵은 선, 표준편차/IQR은 band로 표시한다.
 
-NSMC 리뷰는 짧은 문장이 많기 때문에 `context_length=64`가 가장 낮은 validation bits/char를 냈습니다. 긴 context가 일반적으로 나쁘다는 결론은 아니며, 이 데이터와 5 epoch 조건에서는 짧은 context가 더 데이터 효율적이었다는 결론입니다.
+## 5. 순차 선형 그래프 요구사항
 
-주의: context 실험은 throughput이 일반 기대와 다르게 흔들릴 수 있으므로, 다음부터는 `tokens_per_sec_after_warmup`을 우선 기록합니다.
-
-## 7. Capacity: Embedding, Layers, Heads, FFN
-
-Capacity 실험은 `val loss`만 보면 안 됩니다. 모델을 키우면 품질이 좋아질 수 있지만 `parameter_count`, `tokens_seen`, `estimated_train_flops`, `tokens_per_sec_after_warmup` 비용이 같이 증가합니다.
-
-### 7.1 Embedding Dimension
-
-질문: embedding 폭 증가가 비용 대비 품질 개선을 만드는가?
-
-| 실험 | emb_dim | parameter_count | final_val_loss | final_val_bits_per_char | compute_proxy |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| E07 | 128 | 1,576,192 | 5.3921 | 4.5417 | 6.327e12 |
-| E00 | 192 | 2,954,112 | 5.3020 | 4.4658 | 1.186e13 |
-| E08 | 256 | 4,725,248 | 5.2292 | 4.4044 | 1.897e13 |
-
-결론: `trade-off`
-
-`emb_dim=256`이 품질 지표는 가장 좋지만 parameter_count와 compute proxy가 크게 증가합니다. “큰 embedding이 좋다”가 아니라 “품질은 좋아졌지만 비용 대비 이득을 따로 판단해야 한다”가 정확합니다.
-
-### 7.2 n_heads
-
-질문: 같은 embedding 폭에서 attention head 수를 늘리는 것이 유리한가?
-
-| 실험 | n_heads | head_dim | final_train_loss | final_val_loss | loss_gap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| E31 | 1 | 192 | 4.6391 | 5.1099 | 0.4708 |
-| E32 | 2 | 96 | 4.6212 | 5.0971 | 0.4759 |
-| E28 | 4 | 48 | 4.6197 | 5.1027 | 0.4830 |
-| E33 | 8 | 24 | 4.6249 | 5.1133 | 0.4884 |
-| E34 | 12 | 16 | 4.6330 | 5.1225 | 0.4895 |
-
-결론: `inconclusive -> candidate`
-
-`n_heads=2`가 가장 낮지만 개선 폭이 작습니다. head 수가 너무 많아지면 head당 차원이 작아져 손해가 날 수 있다는 후보 결론은 가능하지만, 최종 주장은 seed 반복이 필요합니다.
-
-### 7.3 n_layers and norm_first
-
-질문은 `Pre-LN이 좋은가?`가 아닙니다. 질문은 아래입니다.
+그래프 저장 경로:
 
 ```text
-깊이가 늘어날 때 Pre-LN이 안정성을 주는가?
-lr/dropout을 안정화하면 Post-LN도 깊은 모델에서 학습 가능한가?
+docs/HY/figures_llm_seq/*.png
+docs/HY/figures_llm_seq/figure_index.md
 ```
-
-20 epoch 재실험:
-
-| 실험 | n_layers | norm 위치 | final_train_loss | final_val_loss | loss_gap | best_val_loss |
-| --- | ---: | --- | ---: | ---: | ---: | ---: |
-| E23 | 4 | post-LN baseline | 4.0407 | 5.0597 | 1.0190 | 5.0448 |
-| E45 | 8 | post-LN | 3.8200 | 5.0774 | 1.2575 | 5.0263 |
-| E46 | 8 | pre-LN | 4.2395 | 5.0180 | 0.7785 | 5.0180 |
-| E47 | 12 | post-LN | 7.2911 | 7.2906 | -0.0005 | 7.2904 |
-| E48 | 12 | pre-LN | 4.1565 | 5.0183 | 0.8618 | 5.0183 |
-
-정규화 조건 재실험:
-
-| 실험 | n_layers | norm 위치 | drop_rate | lr | final_train_loss | final_val_loss | loss_gap |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| E60 | 8 | post-LN | 0.2 | 0.0002 | 4.6068 | 5.0688 | 0.4620 |
-| E61 | 8 | pre-LN | 0.2 | 0.0002 | 4.8956 | 5.1915 | 0.2959 |
-| E62 | 12 | post-LN | 0.2 | 0.0002 | 4.5690 | 5.0609 | 0.4918 |
-| E63 | 12 | pre-LN | 0.2 | 0.0002 | 4.8324 | 5.1424 | 0.3100 |
-
-결론: `trade-off`
-
-기존 20 epoch 조건에서는 깊은 post-LN이 불안정했고 12-layer post-LN은 학습 실패에 가까웠습니다. 하지만 낮은 lr과 높은 dropout을 적용하자 post-LN도 12-layer까지 학습 가능해졌고 validation loss는 post-LN이 더 낮았습니다. pre-LN은 gap이 더 작아 stability 측면에서 장점이 있습니다.
-
-따라서 결론은 “Pre-LN이 항상 좋다”가 아니라 “깊이, lr, dropout 조건에 따라 quality/stability trade-off가 바뀐다”입니다.
-
-### 7.4 FFN Multiplier
-
-질문: FFN 내부 폭을 키우면 비용 대비 validation 품질이 좋아지는가?
-
-| 실험 | ffn_multiplier | parameter_count | final_train_loss | final_val_loss | loss_gap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| E35 | 2 | 2,362,752 | 4.6168 | 5.1104 | 0.4936 |
-| E28 | 4 | 2,954,112 | 4.6197 | 5.1027 | 0.4830 |
-| E36 | 6 | 3,545,472 | 4.6241 | 5.0956 | 0.4715 |
-
-결론: `trade-off`
-
-`ffn_multiplier=6`이 가장 낮지만 개선 폭은 작습니다. FFN 용량 증가는 효과가 있으나 비용 대비 제한적입니다. 다음 실험은 `parameter_count -> bits/char`, `estimated_train_flops -> bits/char`, `tokens_per_sec_after_warmup -> bits/char` 그래프로 봐야 합니다.
-
-## 8. Regularization: Dropout, Weight Tying, Stride
-
-### 8.1 Dropout
-
-질문: dropout은 짧은 학습 loss를 낮추는가, 아니면 긴 학습에서 gap/rebound를 줄이는가?
-
-| 실험 | drop_rate | final_train_loss | final_test_loss | loss_gap | best_val_loss |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| E21 | 0.0 | 3.4061 | 5.4547 | 2.0486 | 5.0645 |
-| E22 | 0.05 | 3.8080 | 5.1431 | 1.3351 | 5.0563 |
-| E23 | 0.1 | 4.0407 | 5.0597 | 1.0190 | 5.0448 |
-| E24 | 0.2 | 4.3312 | 5.0471 | 0.7159 | 5.0471 |
-
-결론: `confirmed` for long-run regularization
-
-dropout은 짧은 학습에서는 손해처럼 보일 수 있지만, 긴 학습에서는 train-test gap을 줄이는 정규화 역할이 나타납니다. dropout 결론은 반드시 epoch 길이를 함께 적어야 합니다.
-
-다음 실험은 아래처럼 dropout과 epoch milestone을 교차해야 합니다.
-
-```text
-drop_rate = [0.0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4]
-epoch milestones = [50, 100, 200, 400, 800, 1500]
-seeds = [123, 321, 777]
-```
-
-### 8.2 Weight Tying
-
-질문: 입력 embedding과 출력 projection 공유가 작은 corpus에서 구조적 regularization처럼 작동하는가?
-
-| 실험 | weight_tying | num_epochs | parameter_count | final_train_loss | final_val_loss | loss_gap |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| E43 | False | 50 | 2,954,112 | 3.1171 | 5.3906 | 2.2735 |
-| E44 | True | 50 | 2,378,112 | 3.6723 | 5.0771 | 1.4049 |
-
-| 실험 | best_val_loss | best_step | final_val_loss | final_minus_best_val_loss |
-| --- | ---: | ---: | ---: | ---: |
-| E43 False 50ep | 5.0448 | 3136 | 5.3906 | 0.3457 |
-| E44 True 50ep | 4.9777 | 4900 | 5.0771 | 0.0994 |
-
-결론: `confirmed` within HY long-run
-
-weight tying은 train loss를 더 빨리 낮추는 옵션이 아닙니다. 오히려 train loss는 덜 낮추지만 validation rebound와 gap을 줄였습니다. 작은 corpus에서는 출력층 자유도를 제한해 regularization처럼 작동한 것으로 해석합니다.
-
-### 8.3 Stride
-
-질문: overlapping sample을 늘리면 품질 개선인가, 아니면 중복 노출로 인한 overfit risk인가?
-
-| 실험 | stride | final_train_loss | final_val_loss | loss_gap | elapsed_sec |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| E28 | 128 | 4.6197 | 5.1027 | 0.4830 | 43.508 |
-| E29 | 64 | 4.1395 | 5.0041 | 0.8646 | 81.775 |
-
-결론: `trade-off`
-
-`stride=64`는 validation loss를 낮췄지만 같은 corpus를 더 많이 겹쳐 보게 하므로 시간과 train-val gap이 커졌습니다. 성능만 보면 이득이지만 데이터 중복과 과적합 가능성을 같이 봐야 합니다.
-
-## 9. Activation
-
-질문: activation 차이가 seed variance보다 큰가?
-
-고정 조건: 8-layer pre-LN, 20 epoch, seed `[42, 123, 2026]`
-
-![activation seed bits per char](docs/HY/figures_temp/activation_seed_bits_per_char.png)
-
-해석: activation 효과는 단일 seed가 아니라 평균과 표준편차로 판단해야 합니다.
-
-| activation | runs | mean_val_loss | std_val_loss | mean_bits_per_char | std_bits_per_char |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| GELU | 3 | 5.0146 | 0.0132 | 4.2237 | 0.0111 |
-| ReLU | 3 | 5.0567 | 0.0053 | 4.2592 | 0.0044 |
-| SiLU | 3 | 5.1267 | 0.0140 | 4.3181 | 0.0118 |
-
-결론: `confirmed` for GELU in this repeated setting
-
-GELU가 평균 validation loss와 bits/char가 가장 낮습니다. ReLU는 train loss를 더 낮추는 대신 gap이 커지고, SiLU는 gap은 작지만 underfit 성향이 있습니다.
-
-주의: SwiGLU/GEGLU는 단순 activation 교체가 아니라 gated FFN 구조 변경이므로 별도 그룹으로 해석해야 합니다.
-
-## 10. Epoch와 장기 학습 해석
-
-질문: 작은 corpus에서 epoch를 길게 늘리면 validation도 계속 좋아지는가?
-
-원칙:
-
-- train loss는 epoch를 늘리면 대체로 계속 내려갑니다.
-- validation이 계속 좋아지는지는 `best_val_loss`, `final_val_loss`, `final_minus_best_val_loss`, `final_generalization_gap`으로 봐야 합니다.
-- 1500 epoch 주장은 epoch 숫자가 아니라 `tokens_seen`, `estimated_chars_seen`, `best_tokens_seen`으로 환산해야 합니다.
-
-동료팀처럼 1500 epoch까지 과적합이 보이지 않는다고 주장하려면 아래 조건을 만족해야 합니다.
-
-| 조건 | 해석 |
-| --- | --- |
-| val bits/char가 milestone마다 계속 하락 | 장기 학습 품질 개선 가능 |
-| final_generalization_gap이 낮게 유지 | memorization risk 낮음 |
-| final_minus_best_val_loss가 작음 | final checkpoint 사용 가능 |
-| seed 3개 이상에서 같은 패턴 | screen-ready |
-| seed 10개에서 같은 패턴 | claim-ready |
-
-권장 epoch milestone:
-
-```text
-milestones = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800, 1000, 1200, 1500]
-seeds = [123, 321, 777]
-```
-
-해석 규칙:
-
-- val 하락 + gap 낮음: 장기 학습 `confirmed`
-- val 하락 + gap 증가: `quality improves with memorization risk`
-- best 이후 final rebound 큼: early stopping 필요
-- final val 상승 + gap 큼: 명확한 과적합
-
-## 11. 그래프 작성 기준
-
-그래프는 예쁜 그림이 아니라 결론 검증 장치입니다. 모든 그래프 아래에는 반드시 “이 그래프가 무엇을 검증했고 어떻게 해석해야 하는지” 한 문장을 붙입니다.
 
 공통 규칙:
 
-- PNG 권장, width 1400px 이상, dpi 160 이상
-- x/y축에 지표명과 단위를 포함
-- baseline은 점선 또는 회색 기준선으로 표시
-- seed 반복은 개별 seed 점 + median/mean 선을 함께 표시
-- n>=3이면 std 또는 IQR error bar 표시
-- n=3 screen-ready와 n=10 claim-ready는 색 또는 marker로 구분
-- vocab 그래프는 `final_val_loss`와 `bits/char`를 둘 다 보여줌
-- epoch 그래프는 best/final/rebound/gap을 같이 보여줌
-- capacity 그래프는 `parameter_count` 또는 `estimated_train_flops`를 x축으로 둠
+- primary x축은 `tokens_seen`이다.
+- 같은 tokenizer/같은 epoch budget 안에서만 `epoch`를 보조 x축으로 쓸 수 있다.
+- vocab 실험은 `val_loss` 단독 그래프를 결론 근거로 쓰지 않는다. `val_bits_per_char`가 primary다.
+- 모든 그래프에는 baseline, best checkpoint, final checkpoint를 표시한다.
+- long run 그래프는 `val_loss_minus_best_so_far` 또는 `final_minus_best` 계열 rebound 곡선을 포함한다.
+- train/val 곡선을 분리해서 그리고, 같은 그림 또는 인접 subplot에 `train_val_gap`을 그린다.
+- final-only bar chart는 본문 근거가 아니라 appendix/summary로만 둔다.
+- 색상은 같은 축에서 같은 값이 항상 같은 색을 갖게 한다.
+- PNG는 비어 있으면 안 된다. 파일 크기, 이미지 크기, non-white pixel ratio를 검사한다.
 
 필수 그래프:
 
-| 그래프 | 목적 | x축 | y축/패널 | 결론 판정 |
+| 파일명 | 목적 | x축 | y축/패널 | 포함 실험 |
 | --- | --- | --- | --- | --- |
-| `vocab_loss_vs_bits_per_char.png` | token loss와 bits/char 결론이 다른지 확인 | vocab_size | final_val_loss, final_val_bits_per_char, val_tokens_per_char | 다르면 vocab 결론 분리 |
-| `vocab_tokenizer_profile.png` | tokenizer 자체가 corpus를 어떻게 쪼개는지 확인 | vocab_size/min_frequency | actual_vocab_size, merges, tokens/char, chars/token, length bins | corpus가 requested vocab을 못 채우면 sweep 부적절 |
-| `parameter_count_vs_bits_per_char.png` | 모델 크기 대비 품질 | parameter_count | final_val_bits_per_char | parameter 증가 + bits 정체면 low priority |
-| `loss_vs_compute_proxy.png` | compute를 더 쓴 만큼 품질이 좋아지는지 | estimated_train_flops | best/final val bits/char | best만 좋고 final이 나쁘면 early stopping |
-| `epoch_best_final_rebound.png` | 장기 학습 rebound 확인 | epoch/tokens_seen | train/val loss, gap, final_minus_best | rebound 크면 final checkpoint 금지 |
-| `dropout_gap_rebound.png` | dropout regularization 확인 | drop_rate | best/final bits, gap, rebound | gap과 bits가 같이 좋아져야 confirmed |
-| `activation_seed_errorbar.png` | activation 차이가 seed variance보다 큰지 확인 | activation_name | val bits/loss + error bar, gap | 평균 차이가 std보다 작으면 inconclusive |
-| `norm_depth_matrix.png` | 깊이에 따른 Pre-LN/Post-LN 안정성 | n_layers x norm_first | bits, gap, rebound heatmap | quality/stability trade-off |
-| `generation_repetition_audit.png` | loss 개선이 생성 품질로 이어지는지 확인 | condition_id | distinct_1/2, repetition_3gram | repetition 높으면 채택 보류 |
+| `01_context_length_learning_curve.png` | 문맥 길이별 수렴 비교 | tokens_seen | val_loss, train_loss, gap, tokens/sec | E01,E00,E02,E03 |
+| `02_vocab_bits_per_char_learning_curve.png` | vocab별 공정 비교 | estimated_chars_seen 또는 tokens_seen | val_bits_per_char, val_loss 보조, tokens_per_char | E04,E00,E05,E06 |
+| `03_emb_dim_capacity_path.png` | 폭 증가와 compute 효율 | compute_proxy_param_tokens | val_bits_per_char, train_val_gap | E07,E00,E08 |
+| `04_n_heads_learning_curve.png` | head 수와 head_dim 비교 | tokens_seen | val_loss, gap, throughput | E31,E32,E28,E33,E34 |
+| `05_n_layers_depth_curve.png` | 깊이 증가와 수렴 안정성 | tokens_seen | val_loss, gap, throughput | E11,E00,E12,E13,E37,E45,E47 |
+| `06_norm_depth_stability_curve.png` | 깊이가 늘 때 Pre-LN이 안정성을 주는지 | tokens_seen | val_loss, gap, rebound | E28,E27,E37,E38,E45,E46,E47,E48,E60,E61,E62,E63 |
+| `07_ffn_multiplier_capacity_path.png` | FFN 폭과 비용 대비 품질 | compute_proxy_param_tokens | val_bits_per_char, tokens/sec | E35,E28,E36 |
+| `08_activation_seed_mean_std_curve.png` | activation 차이와 seed variance | tokens_seen | mean val_bits_per_char + std band, individual seeds | E49~E57 |
+| `09_dropout_overfit_curve.png` | dropout별 과적합 억제 | tokens_seen | train_loss, val_loss, gap, rebound | E16,E17,E00,E18,E21,E22,E23,E24 |
+| `10_qkv_bias_curve.png` | qkv bias 효과가 의미 있는지 | tokens_seen | val_loss delta, gap | E28,E39,E37,E40 |
+| `11_weight_tying_long_curve.png` | weight tying 장기 일반화 | tokens_seen | val_loss, gap, rebound, params | E28,E41,E42,E43,E44 |
+| `12_stride_overlap_curve.png` | overlap 증가와 학습량 착시 제거 | tokens_seen, estimated_chars_seen | val_loss, gap, throughput | E28,E29 |
+| `13_epoch_overfit_rebound_audit.png` | epoch 증가가 언제부터 손해인지 | epoch/tokens_seen | best_so_far, final-best rebound, gap | E21~E24,E43,E44 |
+| `14_loss_vs_compute_all_paths.png` | 전체 실험 compute 대비 성능 | compute_proxy_param_tokens | val_bits_per_char path | 모든 HY 실험 |
 
-10x 전용 그래프는 아래 위치에 둡니다.
+각 그래프는 선형 그래프가 기본이다. 실험별 final 점만 모은 그래프는 같은 파일명에 `_summary`를 붙여 별도로 둔다.
 
-```text
-docs/llm_10x/llm_developer_figures/
-```
+## 6. 축별 해석 기준
 
-Markdown 예시:
+### 6.1 context_length
 
-```markdown
-![vocab loss vs bits per char](docs/HY/figures_temp/vocab_loss_vs_bits_per_char.png)
-![10x tokenizer fairness](docs/llm_10x/llm_developer_figures/tokenizer_fairness.png)
-```
+질문: 긴 문맥이 현재 NSMC corpus에서 실제로 도움이 되는가?
 
-## 12. 다음 실험 목록
+Primary metric:
 
-우선순위는 tokenizer profile -> vocab LM sweep -> epoch/dropout/norm/capacity 순서입니다.
+- 같은 tokenizer이므로 `val_loss`와 `val_bits_per_char` 모두 볼 수 있다.
 
-| 우선순위 | 실험 | 축 | 고정 조건 | primary | guardrail |
-| ---: | --- | --- | --- | --- | --- |
-| 1 | Tokenizer-only profile | vocab/min_frequency | train-only tokenizer, fixed split | tokens/char, chars/token | actual_vocab_size, merge_count, token length |
-| 2 | Vocab LM sweep | 후보 vocab 5개 이하 | 10x baseline, 50 epoch, seeds 3 | final/best val bits | overfit_score, gap, rebound, throughput |
-| 3 | Epoch/exposure | milestone | baseline, seeds 3 | best/final val bits | final_minus_best, gap |
-| 4 | Dropout x Epoch | drop_rate x milestone | baseline | best/final bits | gap/rebound |
-| 5 | Activation | activation_name | fixed model, seeds 3 | seed mean bits | seed std, gap |
-| 6 | Gated FFN | swiglu/geglu | 별도 구조 그룹 | bits/char | parameter_count 증가 |
-| 7 | Norm x Depth | n_layers x norm_first x lr/dropout | layers `[8,12]` | stability + bits | failure, gap, rebound |
-| 8 | Capacity | emb_dim/n_layers/ffn_mult/n_heads | 한 번에 하나씩 변경 | bits/char | params, flops, tok/s |
-| 9 | Generation audit | fixed prompt set | candidate checkpoints | distinct/repetition | manual sample quality |
+반드시 볼 것:
 
-Seed policy:
-
-```text
-exploratory seeds = [123, 321, 777]
-confirm seeds = [123, 321, 777, 2026, 3407, 42, 9001, 2718, 31415, 1618]
-```
-
-## 13. 코드 로그 요구사항
-
-다음 실험부터 아래 로그가 남아야 보고서가 자동으로 재작성 가능합니다.
-
-Tokenizer profile 산출물:
-
-```text
-local/llm_10x_isolated/cache/vocab_{vocab}_minfreq_{minfreq}/tokenizer_profile.json
-local/llm_10x_isolated/cache/vocab_{vocab}_minfreq_{minfreq}/tokenizer_profile.csv
-```
-
-필수 필드:
-
-```text
-corpus_sha256
-train_sha256
-val_sha256
-requested_vocab_size
-actual_vocab_size
-tokenizer_min_frequency
-bpe_merge_count
-train_chars
-val_chars
-train_tokens
-val_tokens
-train_tokens_per_char
-val_tokens_per_char
-train_chars_per_token
-val_chars_per_token
-token_length_histogram
-top_50_merge_rules
-special_token_ids
-```
-
-`result.json` 필수 필드:
-
-```text
-optimizer_updates
-best_tokens_seen
-best_val_bits_per_char
-best_val_nats_per_char
-final_train_nats_per_char
-final_val_nats_per_char
-final_minus_best_val_loss
-estimated_chars_seen
-tokens_per_param
-compute_proxy
-estimated_train_flops
-tokens_per_sec_after_warmup
-peak_gpu_memory_mb
-eval_batches
-eval_tokens
-eval_chars
-```
-
-`history.jsonl` epoch event 필수 필드:
-
-```text
-val_nats_per_char
-val_bits_per_char
-train_nats_per_char
-train_bits_per_char
-final_minus_current_best_val_loss
-tokens_seen
-estimated_chars_seen
-tokens_per_sec_after_warmup
-```
-
-집계 CSV 필수 통계:
-
-```text
-median
-mean
-std
-iqr
-min
-max
-paired_delta_to_baseline_median
-paired_delta_to_baseline_by_seed
-baseline_win_rate
-screen_ready
-claim_ready
-```
-
-## 14. Generation Quality Sanity Check
-
-loss가 좋아도 생성이 반복되면 채택하면 안 됩니다. 고정 prompt set과 decoding config를 사용합니다.
-
-Prompt set:
-
-```text
-이 영화는
-정말
-스토리는
-배우들의 연기는
-```
-
-Decoding:
-
-```text
-temperature=0.8
-top_k=50
-max_new_tokens=100
-num_samples_per_prompt=3
-```
-
-필수 지표:
-
-```text
-distinct_1
-distinct_2
-repetition_ratio_3gram
-average_generated_length
-manual_quality_note
-```
+- `tokens_seen -> val_loss` 선형 곡선
+- `tokens_seen -> train_val_gap`
+- `context_length -> tokens_per_sec_after_warmup`
 
 해석:
 
-- `val_bits_per_char`가 좋아져도 repetition ratio가 커지면 채택 보류
-- vocab이 커진 후보는 생성 샘플에서 이상한 긴 token/파편화가 없는지 사람이 확인
-- checkpoint가 없으면 generation 품질 결론은 쓰지 않음
+- 짧은 context가 이기면 "짧은 리뷰 corpus에서 필요한 문맥 길이가 작다"로 해석한다.
+- 긴 context가 느리면서 val 개선이 없으면 비용 대비 손해다.
+- final loss만 낮거나 높다고 결론 내리지 말고, 수렴 속도와 best 시점도 같이 본다.
 
-## 15. 최종 결론
+### 6.2 vocab_size
 
-현재 HY 실험은 mini GPT 하이퍼파라미터 탐색으로 충분한 출발점입니다. 하지만 LLM 개발자 관점의 최종 결론은 아래처럼 바뀝니다.
+질문: vocab이 커질수록 언어 모델 품질이 좋아지는가, 아니면 token loss scale만 바뀌는가?
 
-1. vocab 실험은 `vocab_size=2000이 best`가 아닙니다. token loss 기준 best는 2000, bits/char 기준 best는 5000입니다. 결론은 tokenizer 효율과 sparse token/비용의 `trade-off`입니다.
-2. context 실험은 NSMC/5 epoch 조건에서 `context_length=64`가 좋았습니다. 긴 context가 보편적으로 나쁘다는 뜻은 아닙니다.
-3. capacity 실험은 품질과 비용을 함께 봐야 합니다. `emb_dim=256`, `ffn_multiplier=6`은 품질 후보지만 compute 비용이 증가합니다.
-4. norm_first는 depth, lr, dropout과 상호작용합니다. Pre-LN/Post-LN 중 하나가 항상 좋은 것이 아니라 quality/stability trade-off입니다.
-5. dropout은 짧은 학습의 loss 개선 장치가 아니라 긴 학습에서 gap/rebound를 줄이는 regularization으로 평가해야 합니다.
-6. weight tying은 작은 corpus에서 구조적 regularization처럼 작동해 gap과 rebound를 줄였습니다.
-7. activation은 seed 반복 기준 GELU가 가장 안정적입니다. 단일 seed 결과로 activation 결론을 쓰면 안 됩니다.
-8. 1500 epoch 같은 장기 학습 주장은 final loss 한 점이 아니라 best/final/rebound/gap/tokens_seen 기준으로 검증해야 합니다.
-9. 10x 실험은 n=3이면 후보 선별 단계이고, n=10이 되어야 최종 claim-ready입니다.
-10. 아직 generation repetition audit과 downstream metric이 없으므로, “좋은 LLM”이라는 최종 표현은 보류합니다.
+Primary metric:
 
-금지할 문장과 대체 문장:
+- `val_bits_per_char`
 
-| 금지 문장 | 대체 문장 |
-| --- | --- |
-| vocab_size=2000이 무조건 best다 | token loss 기준 best는 2000이지만, bits/char 기준 best는 다르다 |
-| 1500 epoch에도 과적합이 없다 | 1500 epoch run은 final, best, gap, rebound를 함께 봐야 한다 |
-| Pre-LN이 항상 좋다 | Pre-LN/Post-LN은 depth, lr, dropout 조건에 따라 quality/stability trade-off가 다르다 |
-| dropout은 좋다/나쁘다 | dropout은 epoch가 길어질 때 gap/rebound를 줄이는 regularization trade-off로 평가한다 |
-| 큰 모델이 좋다 | capacity 증가는 quality, parameter_count, throughput, compute proxy를 함께 본다 |
-| activation A가 무조건 좋다 | activation 효과는 seed 평균과 분산으로만 주장한다 |
+Guardrail:
+
+- `val_tokens_per_char`
+- `actual_vocab_size`
+- `bpe_merge_count`
+- `token_length_histogram`
+- `parameter_count`
+- `tokens_per_sec_after_warmup`
+
+해석:
+
+- `final_val_loss` 기준 best와 `val_bits_per_char` 기준 best가 다르면 `val_bits_per_char`를 우선한다.
+- 예: vocab 2000이 token loss에서 좋아 보여도 bits/char에서 vocab 5000이 낮으면 "vocab 2000 best"라고 쓰면 안 된다.
+- 큰 vocab이 bits/char를 낮추지만 parameter/throughput 비용이 크면 `trade-off`로 쓴다.
+- tokenizer profile 없이 vocab 결론을 내리면 불합격이다.
+
+### 6.3 emb_dim, n_layers, ffn_multiplier
+
+질문: 모델 용량을 늘리면 품질이 좋아지는가, 아니면 데이터/compute 대비 손해인가?
+
+Primary metric:
+
+- `val_bits_per_char` 또는 같은 tokenizer 내 `val_loss`
+
+반드시 볼 것:
+
+- `compute_proxy_param_tokens -> val_bits_per_char` 선형 path
+- `parameter_count -> best_val_bits_per_char`
+- `tokens_per_parameter`
+- `tokens_per_sec_after_warmup`
+- `train_val_gap`
+
+해석:
+
+- 더 큰 모델이 val을 낮추지만 gap도 커지면 `trade-off`다.
+- 더 큰 모델이 compute를 많이 쓰고 val이 거의 같으면 `rejected` 또는 `inconclusive`다.
+- 5 epoch에서 안 좋았던 depth가 20 epoch에서 좋아지면 "짧은 학습에서 결론 불가"라고 쓴다.
+
+### 6.4 n_heads
+
+질문: head 수를 늘리는 것이 도움이 되는가, 아니면 head_dim 축소가 손해인가?
+
+반드시 볼 것:
+
+- `n_heads`, `head_dim`, `val_loss`를 같은 표에 둔다.
+- `tokens_seen -> val_loss` 선형 곡선을 그린다.
+- `tokens_per_sec_after_warmup`도 같이 본다.
+
+해석:
+
+- 같은 `emb_dim`에서 `n_heads` 증가는 head 수 증가와 head_dim 감소를 동시에 의미한다.
+- 차이가 seed variance보다 작으면 `inconclusive`다.
+
+### 6.5 Pre-LN / Post-LN
+
+질문은 "Pre-LN이 좋은가?"가 아니다. 질문은 "깊이가 늘어날 때 Pre-LN이 안정성을 주는가?"다.
+
+Primary metric:
+
+- `tokens_seen -> val_loss`
+- `tokens_seen -> train_val_gap`
+- `tokens_seen -> val_loss_minus_best_so_far`
+
+반드시 비교할 것:
+
+- 4 layer: E28 vs E27
+- 8 layer: E37 vs E38, E45 vs E46, E60 vs E61
+- 12 layer: E47 vs E48, E62 vs E63
+
+해석:
+
+- post-LN 12 layer가 loss 7대에서 멈추면 최적화 실패로 표시한다.
+- regularized 조건 E60~E63에서 post-LN이 회복되면 "Pre-LN 절대 우위"라고 쓰지 않는다.
+- Pre-LN이 val이 더 낮지 않아도 gap이 작으면 안정성 측면의 장점으로 분리해 쓴다.
+
+### 6.6 activation
+
+질문: GELU/ReLU/SiLU 차이가 seed variance를 넘어서는가?
+
+Primary metric:
+
+- seed별 `val_bits_per_char` 곡선의 평균과 표준편차
+
+반드시 볼 것:
+
+- 개별 seed 선
+- 평균 선
+- std 또는 IQR band
+- best checkpoint 평균과 final 평균
+
+해석:
+
+- 평균 차이가 std보다 작으면 결론은 `inconclusive`다.
+- 한 seed만 보고 activation 순위를 매기면 불합격이다.
+
+### 6.7 dropout과 epoch
+
+질문: 오래 학습하면 validation이 계속 좋아지는가, 아니면 어느 시점부터 train만 좋아지는가?
+
+Primary metric:
+
+- `best_val_loss`
+- `final_minus_best_val_loss`
+- `train_val_gap`
+- `gap_slope_last_quarter`
+
+반드시 볼 것:
+
+- 5 epoch dropout: E16,E17,E00,E18
+- 20 epoch dropout: E21,E22,E23,E24
+- 50 epoch weight tying: E43,E44
+
+해석:
+
+- train loss가 계속 내려가는 것은 정상이다. 그것만으로 좋은 학습이라고 말하지 않는다.
+- validation이 best 이후 올라가면 rebound로 표시한다.
+- dropout이 큰 조건에서 final gap이 작고 rebound가 작으면 과적합 억제 근거다.
+- validation이 final까지 계속 내려가면 과적합이 아직 관찰되지 않은 것이지, 데이터가 충분하다는 증거는 아니다.
+
+### 6.8 qkv_bias
+
+질문: qkv bias가 실제 효과인지 노이즈인지 확인한다.
+
+Primary metric:
+
+- paired delta to baseline
+
+해석:
+
+- 차이가 0.001 수준이면 seed 반복 없이는 `inconclusive`다.
+- 4 layer와 8 layer에서 방향이 다르면 interaction으로 표시하고 단독 결론을 피한다.
+
+### 6.9 weight_tying
+
+질문: weight tying이 단순히 parameter를 줄이는가, 아니면 장기 일반화에도 도움이 되는가?
+
+반드시 볼 것:
+
+- parameter_count 감소
+- `tokens_seen -> val_loss`
+- `tokens_seen -> train_val_gap`
+- `tokens_seen -> val_loss_minus_best_so_far`
+- 10/20/50 epoch 경로
+
+해석:
+
+- 5/10 epoch에서 느리게 학습해도 20/50 epoch에서 rebound가 작으면 장기 regularization으로 해석한다.
+- final loss가 아니라 best와 rebound를 함께 써야 한다.
+
+### 6.10 stride
+
+질문: stride를 줄여 overlap을 늘리는 것이 성능 개선인지, 같은 데이터를 더 자주 본 효과인지 분리한다.
+
+Primary metric:
+
+- `tokens_seen -> val_loss`
+- `estimated_chars_seen -> val_loss`
+
+해석:
+
+- stride 64가 좋아도 실제 raw corpus 다양성이 늘어난 것은 아니다.
+- tokens_seen 증가, 중복 sample 증가, throughput 변화까지 같이 써야 한다.
+
+## 7. epoch 실험 단위
+
+REPORT 재작성에서 epoch는 final 결과 표의 행이 아니라 learning curve의 x축이다.
+
+최소 규칙:
+
+- 모든 실험은 `eval_freq=200` 또는 기존 REPORT의 평가 주기를 유지한다.
+- 5 epoch 실험도 epoch 0~5의 모든 평가점을 저장한다.
+- 10/20/50 epoch 실험은 final만 보지 말고 best 시점과 rebound를 표시한다.
+- long epoch 주장은 5, 10, 20, 50 epoch budget을 분리해서 쓴다.
+
+권장 budget:
+
+| 목적 | epoch budget | 이유 |
+| --- | ---: | --- |
+| 빠른 구조 탐색 | 5 | 초기 후보 제거 |
+| baseline 재검증 | 10 | 구조 차이 수렴 확인 |
+| overfit/dropout/norm | 20 | gap과 rebound 관찰 |
+| 장기 일반화/weight tying | 50 | best 이후 rebound 관찰 |
+
+1500 epoch처럼 긴 실험을 한다면 다음 조건을 만족해야 한다.
+
+- 모든 evaluation point를 line graph로 남긴다.
+- `tokens_seen`, `estimated_chars_seen`, `compute_proxy`를 x축으로 다시 그린다.
+- "과적합 없음"은 final loss가 아니라 `best-final rebound`, `gap_slope_last_quarter`, generation repetition 지표가 안정적일 때만 말한다.
+
+## 8. REPORT_temp.md 최종 작성 규칙
+
+실험과 그래프를 다시 만든 뒤 이 파일은 지시서가 아니라 `REPORT.md` 수정본 초안으로 갱신한다.
+
+각 섹션은 아래 구조를 따른다.
+
+```text
+### 4.x 실험명
+
+질문:
+고정 조건:
+변경 변수:
+비교 실험:
+Primary metric:
+Guardrail metric:
+순차 그래프:
+결과 표:
+해석:
+결론 라벨: confirmed / trade-off / inconclusive / rejected
+```
+
+본문 표는 final scalar만 넣지 않는다. 최소한 아래 컬럼을 포함한다.
+
+```text
+experiment_id, changed_value, seed, parameter_count,
+best_epoch, best_tokens_seen, best_val_loss, best_val_bits_per_char,
+final_val_loss, final_val_bits_per_char,
+final_minus_best_val_loss, final_generalization_gap,
+tokens_per_sec_after_warmup, compute_proxy_param_tokens
+```
+
+vocab 섹션은 추가로 아래 컬럼을 포함한다.
+
+```text
+requested_vocab_size, actual_vocab_size, bpe_merge_count,
+val_tokens_per_char, val_chars_per_token, token_length_histogram_summary
+```
+
+activation 섹션은 추가로 아래 컬럼을 포함한다.
+
+```text
+activation, seed_count, mean_best_val_bits_per_char,
+std_best_val_bits_per_char, mean_final_val_bits_per_char,
+std_final_val_bits_per_char, baseline_win_rate
+```
+
+## 9. 그래프 검증 기준
+
+`scripts/verify_hy_llm_report_assets.py`는 아래를 검사한다.
+
+- `REPORT_temp.md`가 `docs/llm_10x`를 본문 결론 근거로 참조하지 않는다.
+- `REPORT_temp.md`에 포함된 모든 이미지 경로가 존재한다.
+- 모든 PNG가 width/height 0이 아니다.
+- 모든 PNG의 non-white pixel ratio가 최소 기준 이상이다.
+- 필수 그래프 14개가 모두 존재한다.
+- `report_llm_metrics_by_step.csv`에 모든 매니페스트 실험 ID가 있다.
+- 각 실험 ID마다 최소 2개 이상의 evaluation point가 있다.
+- vocab 실험 섹션의 primary metric이 `final_val_loss`가 아니라 `final_val_bits_per_char`다.
+- overfit/dropout/epoch 섹션에 `best_val_loss`, `final_minus_best_val_loss`, `train_val_gap`이 모두 등장한다.
+
+## 10. 테스트 요구사항
+
+새로 추가하거나 수정할 테스트:
+
+```text
+tests/test_hy_llm_manifest.py
+tests/test_hy_llm_metrics.py
+tests/test_hy_llm_seq_figures.py
+tests/test_hy_report_render.py
+```
+
+테스트 항목:
+
+- `REPORT.md`에서 추출한 실험 ID가 매니페스트와 일치한다.
+- `bits_per_char = loss * tokens_per_char / ln(2)` 계산이 맞다.
+- tokenizer가 다른 vocab 실험에서 token loss 순위와 bits/char 순위를 따로 계산한다.
+- `best_val_loss`, `best_step`, `final_minus_best_val_loss`가 history에서 재계산된다.
+- `compute_proxy_param_tokens`와 `estimated_train_flops`가 누락 없이 생성된다.
+- seed 반복 실험은 평균, 표준편차, 개별 seed를 모두 산출한다.
+- 필수 sequential graph가 모두 생성되고 nonblank다.
+- `REPORT_temp.md` 렌더링 결과가 `REPORT.md`를 수정하지 않는다.
+
+최종 검증 명령:
+
+```bash
+python -m pytest tests/test_hy_llm_manifest.py tests/test_hy_llm_metrics.py tests/test_hy_llm_seq_figures.py tests/test_hy_report_render.py -q
+python scripts/verify_hy_llm_report_assets.py --report REPORT_temp.md --figures docs/HY/figures_llm_seq
+git diff -- REPORT.md
+```
+
+마지막 명령의 출력은 비어 있어야 한다.
+
+## 11. 결론 작성 금지 문장
+
+아래 식의 결론은 쓰지 않는다.
+
+- "`vocab_size=2000`이 가장 좋다." 단, token loss만 보고 말한 경우.
+- "1500 epoch까지 과적합이 없다." 단, gap/rebound/seed/generation 반복 지표 없이 말한 경우.
+- "Pre-LN이 좋다." 단, depth 증가에 따른 안정성 분석 없이 말한 경우.
+- "dropout 때문에 과적합이 발생한다." 단, dropout별 train/val/gap/rebound 곡선 없이 말한 경우.
+- "activation A가 가장 좋다." 단, seed 평균/분산 없이 말한 경우.
+- "final validation loss가 낮으므로 채택한다." 단, best/final/compute/gap 검토 없이 말한 경우.
+
+## 12. 최종 산출물 체크리스트
+
+- [ ] `REPORT.md`는 수정하지 않았다.
+- [ ] `docs/HY/llm_relog/experiment_manifest.csv`가 REPORT 실험 전체를 포함한다.
+- [ ] 누락 지표가 있는 REPORT 실험은 같은 config/seed/split로 재실행했다.
+- [ ] 모든 run에 `config.json`, `tokenizer_profile.json`, `history.jsonl`, `metrics.json`, `samples.jsonl`, `result.md`가 있다.
+- [ ] `report_llm_metrics.csv`, `report_llm_metrics_by_step.csv`, `report_llm_summary_by_condition.csv`가 생성됐다.
+- [ ] `docs/HY/figures_llm_seq`에 필수 순차 선형 그래프 14개가 있다.
+- [ ] 그래프는 final-only가 아니라 step/epoch/tokens_seen 흐름을 보여준다.
+- [ ] vocab 결론은 `bits/char` 기준으로 다시 썼다.
+- [ ] dropout/epoch 결론은 `best`, `final`, `rebound`, `gap` 기준으로 다시 썼다.
+- [ ] activation 결론은 seed 평균/표준편차 기준으로 다시 썼다.
+- [ ] Pre-LN 결론은 depth 증가 안정성 질문으로 다시 썼다.
+- [ ] `REPORT_temp.md`가 실제 새 로그와 새 그래프를 참조하는 수정본 보고서로 갱신됐다.
+- [ ] 테스트와 asset verification을 통과했다.
+
+## 13. 실행자에게 줄 최종 프롬프트
+
+아래 요청을 그대로 수행하라.
+
+```text
+REPORT.md를 수정하지 말고, REPORT.md에 들어간 docs/HY/testresult 기준 실험 전체를 대상으로 LLM 개발자 지표를 다시 로깅하라.
+
+1. REPORT.md에서 실험 ID와 비교 그룹을 추출해 docs/HY/llm_relog/experiment_manifest.csv를 만든다.
+2. 기존 docs/HY/testresult 로그를 파싱하되, 필요한 LLM 지표나 step별 history가 부족한 실험은 원래 config/seed/split로 다시 실행한다.
+3. 각 실험마다 config.json, tokenizer_profile.json, history.jsonl, metrics.json, samples.jsonl, result.md를 만든다.
+4. history에는 매 eval step마다 train_loss, val_loss, val_bits_per_char, train_val_gap, best_so_far, rebound, tokens_seen, compute_proxy, throughput을 기록한다.
+5. vocab 실험은 token loss가 아니라 bits/char를 primary metric으로 둔다.
+6. dropout, epoch, weight_tying, norm/depth 실험은 final loss가 아니라 best/final/rebound/gap의 시간 변화로 해석한다.
+7. activation은 seed별 개별 선, 평균 선, std/IQR band로 해석한다.
+8. docs/HY/figures_llm_seq에 final-only가 아닌 순차 선형 그래프를 다시 만든다.
+9. 새 로그와 새 그래프만 근거로 REPORT_temp.md를 REPORT.md 수정본 초안으로 다시 작성한다.
+10. pytest와 asset verification을 통과시키고, git diff -- REPORT.md가 비어 있는지 확인한다.
+```
