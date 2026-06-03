@@ -450,7 +450,151 @@ vocab 실험은 token-level `final_val_loss`로 직접 비교하면 안 됩니�
 
 epoch를 더 길게 늘릴 때는 단순히 train loss가 내려가는지 보지 않습니다. validation best가 언제 찍혔는지, 이후 얼마나 되올랐는지, gap이 얼마나 커졌는지를 먼저 봐야 합니다. 1500 epoch 같은 긴 실험은 `epoch`보다 `tokens_seen`과 `compute_proxy` 기준으로 다시 정렬해야 옆 팀 결과와 공정하게 비교할 수 있습니다.
 
-## 17. 최종 결론
+## 17. 발표용 케이스 카드
+
+현재 문서는 지표 표만 보면 어렵습니다. 발표에서는 아래 10개 케이스 중 5~6개를 골라 "처음에는 이렇게 보였는데, LLM 지표로 다시 보니 결론이 바뀌었다"는 흐름으로 말하는 편이 가장 와닿습니다.
+
+| case | figure | what_to_show | speaker_message |
+| --- | --- | --- | --- |
+| 1. vocab loss 착시 | 02_vocab | E04 token loss 4.8114 < E06 5.8825, 그러나 bits/char는 E06 4.3991 < E04 4.5304 | tokenizer가 바뀌면 token loss 순위는 공정하지 않다. |
+| 2. context 짧은 승리 | 01_context | E01 context64 val 5.1461 vs E03 context256 val 5.4470 | 짧은 리뷰 corpus에서는 긴 context 비용이 품질 이득으로 바로 바뀌지 않았다. |
+| 3. 큰 embedding의 비용 | 03_emb | E08 emb256 bits/char 4.4044, gap 0.2821 | 큰 모델은 더 잘 배우지만 비용과 gap도 같이 본다. |
+| 4. dropout 장기 과적합 | 09_dropout, 13_epoch | E21 dropout0 rebound 0.3902 vs E24 dropout0.2 rebound 0.0000 | train loss 하락은 성공이 아니라 memorization 신호일 수 있다. |
+| 5. 깊이와 Pre-LN | 06_norm | E47 12-layer post-LN val 7.2906 vs E48 pre-LN val 5.0183 | Pre-LN은 절대 성능 옵션이 아니라 깊은 모델 안정화 장치로 읽어야 한다. |
+| 6. weight tying의 반전 | 11_weight | E43 no tying rebound 0.3457 vs E44 tying rebound 0.0994 | 초반이 느려도 장기 일반화에서는 parameter 공유가 유리할 수 있다. |
+| 7. activation seed 반복 | 08_activation | GELU/ReLU/SiLU는 seed 평균과 표준편차로만 주장 | 단일 seed 우승은 실험 결론이 아니라 후보 발견이다. |
+| 8. stride overlap 착시 | 12_stride | E29 stride64 val 5.0041 < E28 stride128 5.1027, 그러나 tokens_seen은 거의 2배 | 데이터 증가가 아니라 같은 raw corpus를 더 촘촘히 반복한 효과일 수 있다. |
+| 9. qkv/n_heads/ffn 작은 효과 | 04_heads, 07_ffn, 10_qkv | 차이가 작고 조건별 방향이 달라진 축 | 효과가 작은 축은 seed 반복 전까지 강한 결론을 내지 않는다. |
+| 10. compute plateau | 14_all | x축 0.5는 vocab 5000이 아니라 0.5 * 1e14 param*tokens | 오른쪽으로 간다고 항상 아래로 내려가지 않으면, 더 학습해도 효율이 떨어지는 구간이다. |
+
+### Case 1. 숫자가 맞아도 결론이 틀릴 수 있다: vocab
+
+이 케이스가 발표의 시작점으로 가장 좋습니다. 원본처럼 token-level loss만 보면 `vocab=2000`이 가장 좋아 보입니다. 그런데 tokenizer가 바뀌면 한 문장을 몇 token으로 쪼개는지 자체가 달라집니다. 그래서 LLM 개발자는 token loss를 그대로 비교하지 않고 `bits/char`로 문자 단위 공정화를 합니다.
+
+발표 멘트:
+
+- "처음에는 vocab 2000이 이긴다고 생각했습니다."
+- "하지만 이건 문제 단위가 바뀐 시험지를 그대로 채점한 것과 같습니다."
+- "같은 글자 수 기준으로 다시 보면 vocab 5000이 더 낮은 bits/char를 기록합니다."
+- "따라서 tokenizer 실험의 결론은 loss 표 하나로 내리면 안 됩니다."
+
+### Case 2. 가장 낮은 loss가 항상 가장 안전한 설정은 아니다: context
+
+`context_length=64`는 validation loss가 가장 낮습니다. 발표에서는 이걸 단순히 "64가 최고"라고 끝내지 말고, 두 번째 패널의 `train-val gap`을 같이 보여줘야 합니다. 64는 짧은 리뷰 corpus에 잘 맞아서 빠르게 내려가지만, gap은 가장 큽니다. 반대로 256은 loss가 높지만 gap은 작습니다.
+
+발표 멘트:
+
+- "이 데이터에서는 긴 문맥을 주는 것이 곧바로 품질 개선으로 이어지지 않았습니다."
+- "다만 64가 무조건 안전하다는 뜻도 아닙니다. 가장 낮은 loss와 가장 작은 gap은 다른 이야기입니다."
+- "그래서 다음 실험은 리뷰 길이 bucket별로 나눠서, 긴 문장에서도 64가 이기는지 봐야 합니다."
+
+### Case 3. 큰 모델은 이기지만, 돈값을 봐야 한다: embedding
+
+`emb_dim=256`은 더 낮은 bits/char를 만듭니다. 이건 "모델 용량을 키우면 표현력이 좋아진다"는 직관과 맞습니다. 하지만 x축이 `parameter_count * tokens_seen`인 이유는 바로 비용 때문입니다. 같은 품질 개선을 얻기 위해 parameter와 학습 token을 얼마나 더 썼는지를 같이 봐야 합니다.
+
+발표 멘트:
+
+- "256 차원은 성능만 보면 더 좋습니다."
+- "하지만 LLM 실험에서는 '좋다' 다음에 바로 '얼마를 더 썼나'를 물어봅니다."
+- "현재 결과는 256이 후보지만, 10배 데이터에서는 192와 256의 compute 대비 개선폭을 다시 비교해야 합니다."
+
+### Case 4. epoch를 늘리면 train loss는 내려가지만, 발표에서 봐야 할 것은 validation rebound다
+
+dropout 0.0인 E21은 장기 학습에서 train loss가 더 내려가지만 final checkpoint가 best checkpoint보다 나빠집니다. 반대로 dropout 0.2인 E24는 final이 best와 거의 같고 gap도 작습니다. 그래서 "1500 epoch까지 과적합이 없었다"는 주장은 epoch 숫자만으로는 설득력이 없습니다.
+
+발표 멘트:
+
+- "epoch가 늘면 train loss가 내려가는 건 당연합니다."
+- "우리가 봐야 하는 건 validation이 best를 찍고 다시 올라왔는가입니다."
+- "이 그래프에서는 dropout 0.0이 바로 그 위험한 패턴을 보여줍니다."
+
+### Case 5. Pre-LN은 마법이 아니라 깊은 모델의 안전장치다
+
+12-layer post-LN E47은 제대로 수렴하지 못한 경로에 가깝고, 12-layer pre-LN E48은 정상적으로 내려갑니다. 이 케이스는 "Pre-LN이 좋은가?"보다 "깊이가 늘어날 때 Pre-LN이 안정성을 주는가?"라는 질문에 답합니다.
+
+발표 멘트:
+
+- "4-layer에서는 norm 위치 차이가 아주 크지 않을 수 있습니다."
+- "하지만 12-layer로 깊어지면 post-LN은 흔들리고 pre-LN은 버팁니다."
+- "그래서 Pre-LN은 성능 튜닝이라기보다 깊이 확장 시 안정성 옵션으로 봐야 합니다."
+
+### Case 6. weight tying은 초반 성능이 아니라 장기 일반화로 평가한다
+
+weight tying은 5 epoch에서는 느리게 보입니다. 하지만 50 epoch 비교에서는 tying을 켠 E44가 tying을 끈 E43보다 rebound와 gap이 작습니다. 이건 작은 corpus에서 parameter 공유가 regularization처럼 작동할 수 있다는 좋은 발표 사례입니다.
+
+발표 멘트:
+
+- "초반 loss만 보면 weight tying은 매력적이지 않습니다."
+- "하지만 장기 학습으로 가면 이야기가 바뀝니다."
+- "parameter를 줄이는 선택이 오히려 memorization을 늦추는 regularization이 됩니다."
+
+### Case 7. seed 하나로 이겼다는 말은 아직 결론이 아니다: activation
+
+activation은 seed 반복이 있어서 발표하기 좋습니다. GELU가 평균적으로 가장 낮지만, 핵심은 "GELU가 최고"가 아니라 "반복 실험이 있는 축만 평균과 표준편차를 말할 수 있다"입니다.
+
+발표 멘트:
+
+- "단일 seed에서는 운 좋게 내려간 선이 있을 수 있습니다."
+- "그래서 activation처럼 차이가 작은 축은 seed 반복 평균으로만 말했습니다."
+- "이 기준을 세워야 다음 LLM 실험도 우연과 개선을 구분할 수 있습니다."
+
+### Case 8. stride overlap은 데이터 증가처럼 보이는 착시가 있다
+
+stride를 128에서 64로 줄이면 validation loss는 좋아집니다. 하지만 이것은 새 문장을 추가한 것이 아니라 같은 raw corpus에서 겹치는 window를 더 많이 만든 것입니다. 따라서 "데이터가 늘었다"가 아니라 "중복 노출이 늘었다"로 표현해야 합니다.
+
+발표 멘트:
+
+- "stride 64는 loss만 보면 좋아 보입니다."
+- "하지만 이건 새 데이터를 본 것이 아니라 같은 문장을 겹쳐서 더 많이 본 효과가 섞여 있습니다."
+- "그래서 tokens_seen과 estimated_chars_seen을 둘 다 봐야 합니다."
+
+### Case 9. 작은 차이는 결론이 아니라 보류다: n_heads, FFN, qkv_bias
+
+n_heads, FFN multiplier, qkv_bias는 결과 차이가 작거나 조건에 따라 방향이 달라집니다. 이 케이스는 발표에서 "우리는 모든 축에 결론을 붙이지 않았다"는 신뢰를 줍니다. 전문가다운 보고서는 애매한 결과를 애매하다고 말합니다.
+
+발표 멘트:
+
+- "여기는 좋아 보이는 값이 있지만, 차이가 너무 작습니다."
+- "seed 반복 없이 강한 결론을 내리면 실험이 아니라 이야기 만들기가 됩니다."
+- "그래서 이 축은 다음 반복 실험 대상으로 남겼습니다."
+
+### Case 10. x축 0.5는 vocab 5000이 아니라 compute 5e13이다
+
+전체 compute 그래프에서 x축에 `1e14`가 붙어 있으면, 눈금 `0.5`는 `0.5 x 1e14`, 즉 `5e13 parameter*tokens`입니다. 이 값은 vocab size가 아닙니다. 발표에서는 이걸 꼭 먼저 설명해야 합니다.
+
+발표 멘트:
+
+- "오른쪽으로 간다는 것은 더 큰 모델 또는 더 많은 token 학습으로 비용을 더 썼다는 뜻입니다."
+- "아래로 내려간다는 것은 문자당 예측 불확실성이 줄어 품질이 좋아졌다는 뜻입니다."
+- "오른쪽으로 많이 갔는데 아래로 더 내려가지 않으면, 그 구간은 효율이 떨어진다는 신호입니다."
+
+## 18. 10배 데이터 기준으로 추가하면 좋은 실험 케이스
+
+현재 `REPORT_temp.md`는 기존 HY 로그를 LLM식으로 재해석한 문서입니다. 데이터셋이 10배로 늘어난 뒤에는 아래 케이스를 새로 돌리면 발표가 훨씬 강해집니다. 핵심은 case를 많이 늘리는 것이 아니라, 각 case마다 "하나의 질문, 하나의 고정 조건, 하나의 primary metric"을 두는 것입니다.
+
+| axis | cases | fixed | primary_metric | decision |
+| --- | --- | --- | --- | --- |
+| tokenizer | vocab 2k/3k/4k/5k/8k, same raw split | model, epoch, seed, train/val split | bits/char, tokens/char, throughput | 큰 vocab이 실제 품질인지 token scale 착시인지 판단 |
+| epoch | 5/10/20/50/100 | best tokenizer, same model | best, final, rebound, gap slope | 어느 tokens_seen부터 validation 이득이 멈추는지 판단 |
+| dropout | 0.0/0.05/0.1/0.2/0.3 | 20 또는 50 epoch | gap, rebound, generation repetition | 장기 학습 과적합 억제점 선택 |
+| context | 64/128/192/256/512 | same tokenizer, same tokens_seen | bits/char, tokens/sec, prompt length bucket | 짧은 리뷰 corpus에 필요한 문맥 길이 선택 |
+| depth/norm | 4/8/12 layers x post/pre-LN | lr/dropout grid kept explicit | divergence, final loss, gap | Pre-LN이 깊이 증가 안정성을 주는지 검증 |
+| capacity | emb_dim, ffn_mult, n_heads | same tokenizer and epoch budget | bits/char vs param*tokens | 추가 parameter가 돈값을 하는지 판단 |
+| generation | fixed 20 prompts every checkpoint | temperature/top-k preset | repetition ratio, distinct-n, human sample | loss 개선이 실제 생성 품질로 이어지는지 확인 |
+
+발표용으로는 아래 순서가 가장 이해하기 쉽습니다.
+
+1. vocab 착시: "loss 하나로는 결론이 바뀐다."
+2. context 길이: "데이터 성격이 architecture 선택을 바꾼다."
+3. embedding/capacity: "큰 모델은 좋아질 수 있지만 compute 비용을 같이 봐야 한다."
+4. dropout/epoch: "오래 학습하면 train은 내려가지만 validation은 되오를 수 있다."
+5. norm/depth: "깊어질수록 안정화 기법의 의미가 커진다."
+6. seed/activation: "작은 차이는 반복 실험 없이는 결론이 아니다."
+7. generation sample: "최종적으로 loss 개선이 사람이 보는 출력 개선으로 이어지는지 확인한다."
+
+이렇게 말하면 발표의 결론은 "우리가 mini GPT를 완성했다"가 아니라 "LLM 실험을 판단하는 기준선을 만들었다"가 됩니다. 지금 단계에서는 이 결론이 더 정확하고 설득력 있습니다.
+
+## 19. 최종 결론
 
 1. vocab 실험은 원본 결론을 바꿔야 합니다. token loss 기준 best는 vocab 2000이지만, LLM식 공정 지표인 bits/char 기준 best는 vocab 5000입니다.
 2. 작은 corpus에서 epoch를 늘리면 train loss는 계속 내려가지만, dropout이 낮은 조건은 gap과 rebound가 커집니다.
@@ -459,7 +603,7 @@ epoch를 더 길게 늘릴 때는 단순히 train loss가 내려가는지 보지
 5. activation, qkv_bias처럼 차이가 작은 축은 seed variance 또는 조건 interaction을 함께 봐야 합니다.
 6. 앞으로 추가 실험은 final loss 표가 아니라 `history.jsonl`과 sequential graph를 먼저 남겨야 합니다.
 
-## 18. 다음 실험으로 넘어가기 전 체크리스트
+## 20. 다음 실험으로 넘어가기 전 체크리스트
 
 - vocab 실험은 반드시 tokenizer profile, `tokens/char`, `bits/char`를 같이 기록한다.
 - epoch 실험은 final loss 하나가 아니라 best/final/rebound/gap을 기록한다.
