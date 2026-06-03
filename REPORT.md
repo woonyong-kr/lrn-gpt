@@ -192,28 +192,30 @@ baseline 생성 샘플은 수치만으로 보이지 않는 학습 수준을 보�
 
 해석: `n_heads`는 유의미한 파라미터다. 같은 `emb_dim`에서 head 수는 “관점 수”뿐 아니라 “head당 표현 차원”을 같이 바꾼다. 이번 결과는 많은 head보다 적당한 head 수와 충분한 head dimension이 중요하다는 쪽에 가깝다. loss gap은 모두 0.5 미만이라 과적합은 약한 편이고, 이 모델에서는 `n_heads=2`가 가장 좋았으며 `8` 이상은 head당 차원이 너무 작아진 영향이 보인다.
 
-### 4.5 n_layers: Transformer block 깊이
+### 4.5 n_layers x norm_first: 깊이와 LayerNorm 위치
 
-`n_layers`는 Transformer block을 몇 층 쌓을지 정한다. 깊어질수록 표현력은 커지지만 계산량과 최적화 난이도도 증가한다.
+`n_layers`는 Transformer block을 몇 층 쌓을지 정하고, `norm_first`는 LayerNorm을 attention/FFN 앞에 둘지 뒤에 둘지 정한다. 두 옵션은 따로 해석하기보다 같이 봐야 한다. 깊이가 커질수록 residual 경로를 타고 흐르는 gradient와 activation 분포가 달라지고, 이때 LayerNorm 위치가 학습 안정성에 직접 영향을 주기 때문이다.
 
-깊은 모델은 단순히 layer 수만 늘린다고 좋아지는 것이 아니라, 학습 안정성을 함께 맞춰야 한다. 따라서 `lr=0.0002`, `drop_rate=0.2`, `weight_decay=0.1` 조건에서 `8-layer/12-layer x post-LN/pre-LN` 2x2 실험을 비교했다.
+깊은 모델의 효과를 보려면 학습 안정화 조건을 맞춘 상태에서 비교해야 한다. 그래서 `lr=0.0002`, `drop_rate=0.2`, `weight_decay=0.1`로 학습 강도와 정규화를 조정한 뒤 `8-layer/12-layer x post-LN/pre-LN` 2x2 실험을 수행했다. 이 비교 실험이 n_layers 판단의 주 근거다.
 
-![regularized norm depth metric](./docs/HY/figures/62_regularized_norm_depth_metrics.png)
+![norm depth combined](./docs/HY/figures/65_norm_depth_combined.png)
 
-![regularized norm depth curve](./docs/HY/figures/63_regularized_norm_depth_curves.png)
+위 그래프는 안정화 조건에서 `n_layers`와 `norm_first`를 함께 비교한 것이다. validation loss 기준으로는 `12-layer post-LN(E62)`이 가장 낮고, gap 기준으로는 pre-LN 계열인 `E61`, `E63`이 더 작다. 즉 post-LN은 더 낮은 validation loss를 만들었고, pre-LN은 더 보수적인 일반화 성향을 보였다.
 
-| 실험  | n_layers | norm 위치 | drop_rate | lr     | final_train_loss | final_val_loss | loss_gap | 실행 시간 |
-| --- | -------- | ------- | --------- | ------ | ---------------- | -------------- | -------- | ----- |
+![regularized norm depth metric](./docs/HY/figures/62_regularized_norm_depth_metrics.png)![regularized norm depth curve](./docs/HY/figures/63_regularized_norm_depth_curves.png)
+
+| 실험  | n_layers | norm 위치 | drop_rate | lr     | final_train_loss | final_val_loss | loss_gap | 실행 시간  |
+| --- | -------- | ------- | --------- | ------ | ---------------- | -------------- | -------- | ------ |
 | E60 | 8        | post-LN | 0.2       | 0.0002 | 4.606819         | 5.068817       | 0.461998 | 139.5초 |
 | E61 | 8        | pre-LN  | 0.2       | 0.0002 | 4.895616         | 5.191477       | 0.295861 | 150.6초 |
 | E62 | 12       | post-LN | 0.2       | 0.0002 | 4.569018         | 5.060854       | 0.491836 | 205.2초 |
 | E63 | 12       | pre-LN  | 0.2       | 0.0002 | 4.832398         | 5.142445       | 0.310047 | 206.4초 |
 
-실험 결과 `12-layer post-LN(E62)`이 네 조건 중 가장 낮은 validation loss인 `5.060854`를 냈다. 즉 안정화된 학습 조건에서는 12-layer까지 깊이를 늘려도 학습이 가능했고, validation loss 기준으로는 post-LN 조합이 pre-LN보다 더 좋았다.
+비교 결과 `12-layer post-LN(E62)`은 네 조건 중 가장 낮은 validation loss인 `5.060854`를 냈다.
 
 다만 `E62`가 `8-layer post-LN(E60)`보다 낮춘 validation loss는 약 `0.008`에 불과한 반면, 실행 시간은 `139.5초`에서 `205.2초`로 크게 늘었다. 즉 12-layer는 안정화 조건에서 학습 가능하지만, 현재 데이터와 모델 크기에서는 비용 대비 개선 폭이 작다.
 
-또한 pre-LN은 8-layer와 12-layer 모두에서 post-LN보다 validation loss는 높았지만 loss gap은 더 작았다. 따라서 이번 실험의 결론은 “깊은 모델이면 무조건 pre-LN”이 아니라, 낮은 lr과 충분한 dropout을 주면 post-LN도 12-layer까지 학습 가능하고, pre-LN은 더 보수적인 일반화 성향을 보인다는 것이다.
+또한 안정화 조건에서 pre-LN은 8-layer와 12-layer 모두 post-LN보다 validation loss는 높았지만 loss gap은 더 작았다. 따라서 결론은 “깊은 모델이면 무조건 pre-LN”도 아니고 “post-LN이 항상 좋다”도 아니다. 현재 mini GPT에서는 낮은 lr과 충분한 dropout을 주면 post-LN도 12-layer까지 학습 가능하고, pre-LN은 더 보수적인 일반화 성향을 보인다. 깊이를 늘릴 때는 `n_layers`, `norm_first`, `lr`, `drop_rate`를 한 묶음으로 실험해야 한다.
 
 ### 4.6 ffn_multiplier: FFN 내부 계산 공간의 크기
 
@@ -297,35 +299,9 @@ post-LN: x = norm(x + sublayer(x))
 pre-LN : x = x + sublayer(norm(x))
 ```
 
-처음에는 4-layer 10 epoch만 비교했지만, norm 위치는 깊이가 커질수록 달라질 수 있으므로 8-layer와 12-layer에서 20 epoch까지 다시 비교했다.
+norm 위치는 깊이가 커질수록 효과가 달라질 수 있으므로, 핵심 결과는 4.5의 안정화 비교 실험처럼 `n_layers`와 함께 해석하는 편이 더 정확하다.
 
-![norm position metric](./docs/HY/figures/39_norm_position_metrics.png)
-
-위 10 epoch 그래프에서는 4-layer와 8-layer 모두 post-LN이 pre-LN보다 낮은 validation loss를 냈다. 하지만 이 결론은 10 epoch 기준에 한정된다.
-
-![norm depth8 curve](./docs/HY/figures/42_norm_depth8_curves.png)
-
-위 10 epoch 곡선에서도 8-layer post-LN은 안정적으로 내려가고, 8-layer pre-LN은 validation loss가 높게 유지된다. 그러나 20 epoch까지 늘리면 pre-LN이 뒤늦게 따라와 post-LN을 역전한다.
-
-| 실험  | n_layers | norm_first              | final_train_loss | final_val_loss | loss_gap |
-| --- | -------- | ----------------------- | ---------------- | -------------- | -------- |
-| E28 | 4        | False, post-LN baseline | 4.619696         | 5.102722       | 0.483027 |
-| E27 | 4        | True, pre-LN            | 4.828863         | 5.207495       | 0.378632 |
-| E37 | 8        | False, post-LN          | 4.564352         | 5.070909       | 0.506557 |
-| E38 | 8        | True, pre-LN            | 4.924389         | 5.242465       | 0.318076 |
-
-10 epoch 해석: 짧게 보면 post-LN이 더 좋아 보인다. pre-LN은 gap은 작지만 train loss 자체가 높아 충분히 학습하지 못한 쪽에 가깝다.
-
-| 실험  | n_layers | norm_first     | num_epochs | final_train_loss | final_val_loss | loss_gap  |
-| --- | -------- | -------------- | ---------- | ---------------- | -------------- | --------- |
-| E45 | 8        | False, post-LN | 20         | 3.819977         | 5.077443       | 1.257466  |
-| E46 | 8        | True, pre-LN   | 20         | 4.239478         | 5.018016       | 0.778538  |
-| E47 | 12       | False, post-LN | 20         | 7.291051         | 7.290566       | -0.000485 |
-| E48 | 12       | True, pre-LN   | 20         | 4.156517         | 5.018293       | 0.861776  |
-
-20 epoch 해석: 깊이가 커지고 epoch를 늘리면 결론이 바뀐다. 8-layer에서는 pre-LN이 post-LN보다 final validation loss를 `0.059427` 낮췄고, 12-layer에서는 post-LN이 학습 실패에 가까운 반면 pre-LN은 정상적으로 수렴했다. 따라서 깊은 설정에서는 pre-LN의 안정성 이점이 실제로 나타났다.
-
-정규화 조건 재실험에서는 결론이 다시 보정된다. `drop_rate=0.2`, `lr=0.0002`로 바꾸면 post-LN 8-layer `E60`과 post-LN 12-layer `E62`가 각각 pre-LN `E61`, `E63`보다 validation loss가 낮다. 대신 pre-LN은 두 깊이 모두 train-validation gap이 더 작다. 따라서 `norm_first`는 단독으로 “성능을 올리는 옵션”이라기보다, 깊이, lr, dropout과 함께 최적화 안정성/일반화 성향을 바꾸는 옵션으로 봐야 한다.
+안정화 조건에서는 post-LN 8-layer `E60`과 post-LN 12-layer `E62`가 각각 pre-LN `E61`, `E63`보다 validation loss가 낮다. 대신 pre-LN은 두 깊이 모두 train-validation gap이 더 작다. 따라서 `norm_first`는 단독으로 “성능을 올리는 옵션”이라기보다, 깊이와 학습 안정화 조건에 따라 최적화 안정성/일반화 성향을 바꾸는 옵션으로 봐야 한다.
 
 ### 4.10 qkv_bias: attention projection의 offset
 
@@ -400,10 +376,104 @@ qkv_bias=True : Q = xW + b
 
 1. `n_heads`는 10 epoch 재실험 결과 `n_heads=2`가 가장 좋았고, head 수가 너무 많아지면 head당 차원이 작아져 손해가 났다.
 2. `ffn_multiplier`는 10 epoch 기준 `6`이 가장 좋았지만 개선 폭은 작다. FFN 용량 증가는 효과가 있으나 비용 대비 제한적이다.
-3. `norm_first`는 epoch, depth, lr, dropout에 따라 결론이 달라졌다. 기존 20 epoch 조건에서는 pre-LN이 더 안정적이고 12-layer post-LN은 학습 실패에 가까웠지만, `drop_rate=0.2`, `lr=0.0002`로 정규화한 E60~E63에서는 post-LN이 더 낮은 validation loss를 냈고 pre-LN은 더 작은 gap을 보였다.
+3. `norm_first`는 `n_layers`, `lr`, `drop_rate`와 함께 봐야 한다. 안정화 비교 실험 E60~E63에서는 post-LN이 더 낮은 validation loss를 냈고, pre-LN은 더 작은 train-validation gap을 보였다.
 4. `qkv_bias`는 4-layer에서는 효과가 거의 없고 8-layer에서는 악화되어, 현재 실험 우선순위가 낮다.
 5. `weight_tying`은 loss를 더 빨리 줄이는 옵션이 아니다. train loss는 `False`가 더 빨리 줄지만, 50 epoch에서는 과적합이 커졌다. `True`는 파라미터 절감과 장기 일반화 정규화 관점에서 의미 있는 옵션이다.
 6. dropout은 짧은 학습에서는 손해처럼 보이지만, 긴 학습에서는 train-test gap을 줄이는 정규화 역할이 분명하게 나타났다.
 7. activation은 8-layer pre-LN 20 epoch seed 3개 반복에서 GELU가 가장 낮은 평균 validation loss를 냈다. ReLU는 train loss를 더 낮추는 대신 gap이 커졌고, SiLU는 underfit 성향이 컸다.
 
 최종적으로 현재 mini GPT에서는 `context_length=64`, `emb_dim=256`, `n_heads=2`, `ffn_multiplier=6`, `activation=GELU`, `drop_rate=0.1~0.2`, `weight_tying=True`를 조합 후보로 두는 것이 합리적이다. 깊은 모델의 LayerNorm 위치는 단순히 pre-LN으로 고정하기보다, 낮은 lr과 충분한 dropout을 적용한 조건에서 post-LN/pre-LN을 함께 비교해야 한다.
+
+## 6. vocab 심화 탐구
+
+### 6.1 왜 vocab 단위를 더 봤는가
+
+`vocab_size`는 한 번 만들어두면 같은 tokenizer를 저장해서 계속 재활용할 수 있다. 그래서 좋은 vocab 단위를 찾으면 이후 실험에서도 가용성이 높다고 판단했다.
+
+처음 궁금했던 것은 vocab 단위가 달라질 때 validation loss와 과적합 양상이 어떻게 달라지는지였다. 특히 1000, 3000, 5000, 7000, 10000 vocab을 50 epoch까지 비교했을 때, 예상과 다르게 1000 vocab의 overfit gap이 가장 작았다.
+
+![vocab deep validation loss](./docs/HY/figures/66_vocab_deep_val_loss.png)
+
+위 그래프는 vocab 크기별 validation loss 변화를 보여준다. 1000 vocab은 초반부터 낮은 validation loss를 유지하고, 큰 vocab일수록 후반 validation loss가 빠르게 상승한다. 3000 vocab은 5000, 7000, 10000보다 훨씬 안정적이지만, 1000 vocab보다는 표현 단위가 크기 때문에 loss 자체는 더 높게 출발한다.
+
+![vocab deep overfit gap](./docs/HY/figures/67_vocab_deep_overfit_gap.png)
+
+위 그래프는 `validation loss - train loss` gap이다. 1000 vocab은 gap이 작게 유지되지만, 5000 이상에서는 epoch가 진행될수록 gap이 크게 벌어진다. 큰 vocab 사전에서는 희귀 token이 많아지고, 현재 데이터 규모에서는 이런 token을 충분히 일반화해서 배우기 어렵다. 그 결과 train에 자주 등장한 조각은 빠르게 외우지만 validation에서는 같은 방식으로 재사용되지 않아 gap이 커진다. 즉 데이터 간 공유가 줄어 일반화는 약해지고, train에서 반복되는 조각에는 더 쉽게 과적합된다.
+
+### 6.2 큰 vocab을 안정적으로 쓰기 위한 설정
+
+1000 vocab은 안정적이지만 단어를 너무 잘게 쪼갤 가능성이 크다. 특히 한글에서는 너무 작은 vocab이 byte 수준 결합을 과도하게 많이 만들 수 있고, 실제 단어 또는 형태소 단위 표현력이 부족할 수 있다. 그래서 3000, 5000, 7000 vocab을 유지한 채 학습 설정만 바꿔 더 효율적인 조합을 찾는 방향으로 봤다.
+
+가설은 다음과 같다. vocab을 3000 이상으로 키우면 표현 단위는 좋아질 수 있지만, baseline 학습률과 정규화로는 50 epoch 동안 train 데이터에 너무 빨리 맞춰질 수 있다. 따라서 vocab size 자체를 줄이는 대신 `lr`, `dropout`, `weight_decay`를 조정해 50 epoch 끝까지 버티는 조합을 찾는 것이 목표였다.
+
+| 그룹 | 조정 방향 | 의도 |
+| --- | --- | --- |
+| B | lr만 낮춤 | 학습 속도를 늦춰 train memorization을 완화 |
+| C | lr을 낮추고 dropout을 올림 | 학습 속도와 activation 의존도를 함께 낮춤 |
+| D | dropout과 weight_decay를 함께 강화 | activation 과적합과 가중치 과대화를 함께 제어 |
+| E | lr을 더 낮추고 dropout/weight_decay를 강하게 적용 | 50 epoch 장기 안정성을 우선 |
+
+결과적으로 3000, 5000, 7000 모두 E 그룹이 가장 안정적이었다. 큰 vocab 자체가 무조건 나쁜 것은 아니지만, 큰 vocab일수록 기존처럼 빠르게 학습시키면 train 쪽을 먼저 외워버린다. 따라서 큰 vocab에는 더 낮은 learning rate와 강한 정규화가 필요하다.
+
+이때 각 설정의 의미는 다음과 같다.
+
+| 항목 | 의미 |
+| --- | --- |
+| lr | learning rate. loss가 낮아지는 방향으로 이동할 때 한 번에 얼마나 크게 움직일지 정한다. 너무 크면 train에 빠르게 맞고 불안정해질 수 있다. |
+| dropout | 과적합 방지용 mask. 학습 중 일부 activation을 무작위로 제거해 특정 패턴에 과하게 의존하지 않게 한다. |
+| weight_decay | 가중치가 지나치게 커지는 것을 억제하는 정규화. 모델이 train 데이터에 과하게 날카롭게 맞는 것을 줄인다. |
+
+50 epoch 고정 조건에서는 3000-E가 가장 안정적으로 보였다. 5000-E는 효율과 byte-normalized 점수 측면에서 장점이 있지만, 안정성 기준에서는 3000-E보다 살짝 불리했다.
+
+### 6.3 BPE 병합 조건 조정: MF50 vocab
+
+다음으로는 vocab 크기뿐 아니라 BPE 병합 조건도 조절했다. 한글은 UTF-8에서 보통 한 글자가 3바이트로 표현된다. 따라서 1~2바이트 조각은 한글 한 글자를 구성하기 위한 중간 byte 조각일 가능성이 높다.
+
+이런 짧은 조각까지 `min_frequency`로 강하게 제한하면 한글 글자 자체를 구성하는 기본 결합이 충분히 만들어지지 않을 수 있다. 반대로 3바이트 이상 조각은 한 글자 또는 여러 글자 단위의 의미 있는 병합일 가능성이 크다. 그래서 3바이트 미만 pair는 빈도와 상관없이 병합을 허용하고, 3바이트 이상 pair에만 `min_frequency=50`을 적용하는 방식으로 전환했다.
+
+이 목적은 한글 문자 구성에 필요한 기본 byte 결합은 살리면서, 데이터에 적게 등장하는 긴 표현이 vocab에 과하게 들어가는 것을 막는 것이다. 결과적으로 목표 vocab을 억지로 끝까지 채우지 않고 actual vocab 2328에서 멈추는 MF50 vocab이 만들어졌다.
+
+MF50은 1000 vocab보다는 표현 단위를 조금 더 키우면서도, 3000/5000/7000처럼 희귀 token이 과하게 늘어나는 상황을 줄이는 중간 지점이다. 학습 결과 raw validation loss는 꽤 좋았고 큰 vocab baseline보다 훨씬 덜 무너졌다. 다만 best epoch가 9 근처라서 50 epoch 끝까지 안정적으로 버틴다기보다는, 초반에 좋은 성능을 찍고 이후 조금씩 과적합되는 패턴이었다. 따라서 MF50은 병합 조건 조절 방향이 유효하다는 후보이며, 더 낮은 learning rate나 강한 정규화와 함께 다시 테스트할 가치가 있다.
+
+### 6.4 한글 특화 vocab 품질 평가
+
+추가로 `hangul_vocab_evaluation.md`에서는 vocab 목록 자체를 기준으로 한글 특화 vocab을 평가했다. 이 평가는 모델 학습 loss가 아니라 tokenizer가 한국어를 얼마나 의미 있는 단위로 자르는지 보는 분석이다. 즉 “학습이 잘 됐는가”가 아니라 “vocab 안에 쓸 만한 한글 chunk가 얼마나 들어 있는가”를 보는 별도의 축이다.
+
+좋은 한글 tokenizer라면 byte 단위로 지나치게 쪼개지지 않고, `영화`, `재미`, `합니다`, `개인적으로`처럼 다글자 chunk를 많이 가져야 한다. 또한 조사, 어미, 자주 나오는 표현이 자연스럽게 묶이고, UTF-8 byte fallback 의존이 적어야 한다.
+
+![hangul vocab quality](./docs/HY/figures/68_hangul_vocab_quality.png)
+
+위 그래프는 decoded vocab entry 기준으로 한글 token 품질을 비교한 것이다. `한글 특화 vocab(min_freq=10)`은 깨끗한 한글 토큰 수, 2글자 이상 한글 토큰 수, 3글자 이상 한글 토큰 수, 평균 한글 음절 길이에서 모두 기본 BPE 3000보다 높다.
+
+| vocab | 깨끗한 한글 토큰 수 | 2글자 이상 한글 토큰 | 3글자 이상 한글 토큰 | 평균 한글 음절 길이 |
+| --- | ---: | ---: | ---: | ---: |
+| 한글 특화 vocab(min_freq=50) | 589 | 163 | 24 | 1.297 |
+| 한글 특화 vocab(min_freq=30) | 905 | 325 | 58 | 1.404 |
+| 한글 특화 vocab(min_freq=10) | 2,208 | 1,207 | 310 | 1.702 |
+| 기본 BPE 3000 | 2,064 | 1,087 | 266 | 1.664 |
+
+특히 `min_freq=10` vocab은 기본 BPE 3000에 들어 있는 깨끗한 한글 토큰 2064개를 모두 포함하면서, 추가로 더 많은 한글 토큰을 가지고 있었다. 기본 BPE 3000에는 없고 `min_freq=10`에만 있는 예시는 `킬링타임용`, `이라고 생각`, `대한민국`, `배우들이`, `보는내내`, `사람들은`, `재미가 없`, `마지막에`, `최악의`, `충분히` 같은 표현이다. 이들은 한국어 리뷰에서 실제 의미 단위로 자주 등장할 수 있는 chunk라서, 문장을 덜 잘게 쪼갤 가능성이 높다.
+
+반대로 `min_freq=30`, `min_freq=50`은 병합 기준이 너무 강해 다글자 한글 토큰이 충분히 만들어지지 않았다. 한글 토큰은 존재하지만 한 글자 단위에 가까운 조각이 많아, 기본 BPE 3000보다 낫다고 보기 어렵다. vocab 목록 품질만 보면 순위는 다음처럼 정리할 수 있다.
+
+```text
+한글 특화 vocab(min_freq=10) > 기본 BPE 3000 > 한글 특화 vocab(min_freq=30) > 한글 특화 vocab(min_freq=50)
+```
+
+다만 이 평가는 vocab 목록 자체를 본 것이다. 최종 판단에는 같은 한국어 평가 문장을 직접 encode해서 문장당 평균 token 수, byte fallback 발생 횟수, decode 복원 정확도, 조사/어미 분리 비율을 함께 확인해야 한다. 현재 단계에서는 `min_freq=10` 설계가 한글 친화 tokenizer 후보로 가장 흥미롭고, 학습 안정화 실험까지 이어갈 가치가 있다.
+
+### 6.5 byte-only vocab
+
+마지막으로 BPE 병합을 아예 제거한 byte-only vocab도 테스트했다. 희귀 token 과적합의 원인이 BPE merge 자체일 수 있다고 봤기 때문에, merge가 전혀 없는 기준점을 확인하고 싶었다.
+
+byte-only는 특수 token과 256개 raw byte만 사용하므로 actual vocab이 260이다. 어떤 한글 문장도 byte 단위로 표현할 수 있고, 희귀한 긴 token이 생기지 않는다. 결과적으로 50 epoch와 300 epoch 모두에서 overfit gap은 작았고 장기 학습 안정성은 좋아 보였다.
+
+하지만 token 수가 너무 많아 학습 시간이 길어지고, `context_length=64`가 실제 문자/단어 기준으로는 매우 짧아지는 문제가 있었다. 또 의미 있는 문장 구사력이 다른 조건보다 빈약해 생성 품질도 좋지 않았다. 따라서 byte-only는 최종 후보라기보다, BPE merge를 줄이는 방향이 과적합 완화에 도움이 된다는 기준 실험으로 보는 것이 적절하다.
+
+### 6.6 최종 vocab 선택
+
+최종적으로 3000 vocab을 선택한 이유는 균형이 가장 좋았기 때문이다. 1000 vocab은 안정적이지만 단어를 너무 잘게 쪼갤 수 있고, 5000 이상은 표현 단위는 좋아지지만 현재 데이터 규모에서는 과적합이 더 빨리 나타났다.
+
+반면 3000 vocab은 표현 단위를 어느 정도 확보하면서도 여러 학습 설정에서 안정적으로 유지됐다. 특히 50 epoch 고정 조건에서 3000-E가 안정성 기준으로 가장 납득 가능한 선택이었다. 따라서 현재 mini GPT와 NSMC 규모에서는 3000 vocab이 표현력, 안정성, 학습 비용 사이의 가장 현실적인 절충점이다.
+
+다만 tokenizer 품질만 따로 보면 한글 특화 `min_freq=10` vocab이 기본 BPE 3000보다 더 좋아 보인다. 따라서 최종 모델용 tokenizer는 당장 3000 vocab을 쓰되, 후속 실험에서는 `한글 특화 min_freq=10 + 3000-E 스타일의 낮은 lr/강한 정규화` 조합을 가장 우선적으로 검증하는 것이 좋다.
