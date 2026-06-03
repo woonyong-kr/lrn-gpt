@@ -406,7 +406,7 @@ def write_report(
     lines.append(f"- all_results_jsonl: `{meta.get('all_results_jsonl')}`")
     if queue_status:
         lines.append(
-            f"- queue_now: `run_{to_int(queue_status.get('current_run_number')):04d}` / "
+            f"- queue_last_recorded: `run_{to_int(queue_status.get('current_run_number')):04d}` / "
             f"`{queue_status.get('current_condition_id')}` / `{queue_status.get('stage')}` / "
             f"`{to_int(queue_status.get('current_step'))}/{to_int(queue_status.get('total_steps'))}` updates"
         )
@@ -441,7 +441,7 @@ def write_report(
     lines.append("| Pretraining 품질 | validation loss, perplexity, bits/token, bits/char | 사용 가능 | loss가 낮을수록 좋지만 tokenizer가 다르면 bits/char를 우선 비교 |")
     lines.append("| Tokenizer 공정성 | chars/token, bits/char, tail vocab type, top-token mass | 사용 가능 | token loss만 비교하면 vocab size가 다른 조건에서 불공정할 수 있음 |")
     lines.append("| Scaling/compute | parameter_count, tokens_seen, FLOPs proxy = 6*N*T, loss-vs-compute | 근사 가능 | 실제 MFU는 없지만 조건 간 계산량 proxy 비교는 가능 |")
-    lines.append("| 시스템 비용 | tokens/sec, elapsed time, seconds/epoch | 사용 가능 | 같은 품질이면 더 빠른 조건이 우선 후보 |")
+    lines.append("| 시스템 비용 | warmup-excluded tokens/sec, elapsed time, seconds/epoch | 사용 가능 | 같은 품질이면 더 빠른 조건이 우선 후보 |")
     lines.append("| Downstream benchmark | MMLU, BIG-bench, GSM8K, HumanEval | 없음 | 현재는 사전학습 소형 LM 탐색이라 태스크 성능 결론 불가 |")
     lines.append("| Chat/instruction | pairwise win rate, LLM judge, MT-Bench류 | 없음 | instruction tuning과 평가셋이 없어 사용자 선호 결론 불가 |")
     lines.append("| Safety/holistic | toxicity, robustness, calibration, fairness | 없음 | 별도 HELM류 harness가 필요 |")
@@ -469,7 +469,7 @@ def write_report(
             ("pretraining_quality", "Figure 1. Pretraining 품질 순위", "bits/char 기준으로 tokenizer 차이를 보정한 품질 순위입니다. 막대 옆 PPL은 같은 tokenization 조건 안에서 직관을 돕는 보조 지표입니다."),
             ("loss_vs_compute", "Figure 2. Loss vs Compute", "6*N*T FLOPs proxy와 validation bits/char를 같이 봅니다. 점선은 현재 screen-ready 조건의 compute-quality frontier입니다."),
             ("loss_vs_tokens", "Figure 3. Loss vs Tokens", "개별 physical run의 tokens_seen과 validation bits/char를 봅니다. 대부분 0.1 epoch라 x축이 좁지만, 300-step/324-step 차이와 축별 품질 분산을 확인할 수 있습니다."),
-            ("throughput_quality", "Figure 4. Throughput vs Quality", "tokens/sec와 validation bits/char를 같이 봅니다. 같은 품질이면 오른쪽 아래 조건이 더 좋습니다."),
+            ("throughput_quality", "Figure 4. Throughput vs Quality", "warmup 제외 tokens/sec와 validation bits/char를 같이 봅니다. 같은 품질이면 오른쪽 아래 조건이 더 좋습니다."),
             ("tokenizer_fairness", "Figure 5. Tokenizer 공정성", "vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동시에 보여줍니다."),
         ]
         lines.append("## 핵심 Figures")
@@ -491,7 +491,7 @@ def write_report(
         "`validation loss`와 `perplexity`는 token 단위 지표라 같은 tokenizer 안에서는 유용하지만, vocab size 비교에서는 bits/char가 더 공정합니다."
     )
     lines.append("")
-    lines.append("| 순위 | 조건 | 축 | 값 | n | val loss nats/token | val PPL | val bits/token | val bits/char | params(M) | tokens seen(M) | FLOPs proxy(T) | tok/s |")
+    lines.append("| 순위 | 조건 | 축 | 값 | n | val loss nats/token | val PPL | val bits/token | val bits/char | params(M) | tokens seen(M) | FLOPs proxy(T) | warm tok/s |")
     lines.append("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for index, row in enumerate(ranked[:20], start=1):
         lines.append(
@@ -555,7 +555,7 @@ def write_report(
             f"`{fmt_float(best_compute.get('train_flops_proxy_tflop_median'), 1)}` TFLOPs proxy."
         )
         lines.append(
-            f"- 처리량 1위: `{fastest.get('condition_id')}`, "
+            f"- warmup 제외 처리량 1위: `{fastest.get('condition_id')}`, "
             f"`{fmt_float(fastest.get('tokens_per_sec_median_float'), 0)}` tok/s."
         )
         lines.append(
@@ -619,7 +619,7 @@ def write_report(
     lines.append("## 다음 실행 제안")
     lines.append("")
     lines.append("1. 현재 상위 후보를 `n=10` 반복으로 보강해 claim-ready 조건을 먼저 만듭니다.")
-    lines.append("2. 상위 후보 2-3개는 `--with-checkpoints`로 별도 짧은 검증 run을 돌려 next-token sample quality를 붙입니다.")
+    lines.append("2. 상위 후보 2-3개는 queue 실행 시 `--with-checkpoints`를 켜거나, 단일 `run_next`를 `--no-checkpoints` 없이 돌려 next-token sample quality를 붙입니다.")
     lines.append("3. tokenizer 비교는 token loss가 아니라 bits/char, chars/token, tail type, top-token mass를 함께 유지합니다.")
     lines.append("4. downstream 평가는 지금 queue와 분리해서 작은 eval harness로 시작합니다. 이 프로젝트 규모에서는 MMLU 전체보다 domain-relevant cloze/QA와 짧은 next-token qualitative set이 먼저 현실적입니다.")
     lines.append("")

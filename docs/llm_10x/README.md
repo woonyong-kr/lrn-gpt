@@ -10,12 +10,18 @@
 - `aggregate_summary.csv`: 조건별 생성 통계
 - `aggregate_report.md`: 사람이 읽는 집계 보고서
 - `aggregate_meta.json`: 집계 상태와 원장 누락 감사 결과
+- `screen_ready_report.md`: n>=3 조건을 발표/검토용으로 요약한 중간 보고서
+- `llm_developer_report.md`: LLM 개발자 지표 기준으로 다시 쓴 중간 보고서
+- `llm_developer_figures/`: bits/char, compute, throughput, tokenizer 공정성 그래프
+- `screen_ready_figures/`, `paper_figures/`: screen-ready 조건과 발표용 figure
 
 ## 로컬 실행 파일
 
 큰 실행 산출물은 `local/llm_10x_isolated/` 아래에 쌓이며 git 추적 대상이 아닙니다.
 
 - `local/llm_10x_isolated/cache/vocab_*_minfreq_*/`: tokenizer와 token-id cache
+- `local/llm_10x_isolated/cache/vocab_*_minfreq_*/tokenizer_profile.json`: tokenizer 해석용 profile
+- `local/llm_10x_isolated/cache/vocab_*_minfreq_*/tokenizer_profile.csv`: profile의 표 형식 요약
 - `local/llm_10x_isolated/runs/run_*/`: run별 설정, 지표, history, checkpoint
 - `local/llm_10x_isolated/queue_events.jsonl`: 재개 가능한 큐 이벤트 로그
 - `local/llm_10x_isolated/queue_status.json`: 현재 큐 상태
@@ -70,6 +76,22 @@ python scripts/llm_10x_run_next.py --run-number 1 --max-steps 2 --no-checkpoints
 python scripts/llm_10x_aggregate.py
 ```
 
+5. Regenerate reports and figures.
+
+```bash
+python scripts/llm_10x_screen_ready_report.py
+python scripts/llm_10x_llm_developer_report.py
+```
+
+6. Optional generation audit when checkpoints exist.
+
+```bash
+python scripts/llm_generation_metrics.py \
+  --checkpoint local/llm_10x_isolated/runs/run_0001/checkpoints/best.pt \
+  --config-json local/llm_10x_isolated/runs/run_0001/result.json \
+  --tokenizer-json local/llm_10x_isolated/cache/vocab_12000_minfreq_2/tokenizer.json
+```
+
 ## Decision Rule
 
 Exploratory conditions become screen-ready at 3 completed repeats. They are not
@@ -99,8 +121,36 @@ the aggregate report has 390 analysis rows after epoch milestone expansion.
 
 ## Decision Metrics
 
-Final selection uses three groups together:
+Final selection uses four groups together:
 
-- quality: `final_val_bits_per_char`, `final_val_loss`, `best_val_loss`
-- overfit risk: `overfit_score`, `final_generalization_gap`, `generalization_gap_delta`
-- cost: `elapsed_sec`, `seconds_per_epoch`, `tokens_per_sec`
+- tokenizer-fair quality: `final_val_bits_per_char`, `final_val_nats_per_char`, `best_val_bits_per_char`
+- overfit/rebound risk: `overfit_score`, `final_generalization_gap`, `generalization_gap_delta`, `final_minus_best_val_loss`
+- exposure and compute: `tokens_seen`, `estimated_chars_seen`, `tokens_per_param`, `compute_proxy`, `estimated_train_flops`
+- system cost: `elapsed_sec`, `seconds_per_epoch`, `tokens_per_sec_after_warmup`
+
+Tokenizer changes must not be ranked by `final_val_loss` alone. Vocab and tokenizer-min-frequency phases use bits/char plus tokenizer profile fields:
+
+- `actual_vocab_size`
+- `bpe_merge_count`
+- `train_tokens_per_char`, `val_tokens_per_char`
+- `train_chars_per_token`, `val_chars_per_token`
+- `token_length_histogram`
+- `top_50_merge_rules`
+
+## Generated Result Schema
+
+New physical runs write the following LLM metric fields to `result.json`:
+
+- `optimizer_updates`
+- `best_tokens_seen`
+- `best_val_bits_per_char`, `best_val_nats_per_char`
+- `final_train_nats_per_char`, `final_val_nats_per_char`
+- `final_minus_best_val_loss`
+- `estimated_chars_seen`
+- `tokens_per_param`
+- `compute_proxy`, `estimated_train_flops`
+- `tokens_per_sec_after_warmup`
+- `peak_gpu_memory_mb`
+- `eval_batches`, `eval_tokens`, `eval_chars`
+
+Epoch events in `history.jsonl` include per-character loss, current best rebound, exposure, and warmup-excluded throughput so 1500-epoch long-runs can be analyzed by milestone instead of final-only loss.

@@ -1,13 +1,13 @@
 # LLM 10x 중간 보고서 - LLM 개발자 지표 기준
 
-- generated_at_utc: `2026-06-03T16:01:25+00:00`
-- completed_physical_runs: `65` / `354`
-- pending_physical_runs: `289`
+- generated_at_utc: `2026-06-03T16:07:25+00:00`
+- completed_physical_runs: `66` / `354`
+- pending_physical_runs: `288`
 - screen_ready_conditions: `20`
 - claim_ready_conditions: `0`
 - result_ledger_status: `PASS`
 - all_results_jsonl: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/llm_10x/all_run_results.jsonl`
-- queue_now: `run_0110` / `M031` / `training` / `75/324` updates
+- queue_last_recorded: `run_0111` / `M031` / `training` / `75/324` updates
 
 ## 요약
 
@@ -23,7 +23,7 @@
 | Pretraining 품질 | validation loss, perplexity, bits/token, bits/char | 사용 가능 | loss가 낮을수록 좋지만 tokenizer가 다르면 bits/char를 우선 비교 |
 | Tokenizer 공정성 | chars/token, bits/char, tail vocab type, top-token mass | 사용 가능 | token loss만 비교하면 vocab size가 다른 조건에서 불공정할 수 있음 |
 | Scaling/compute | parameter_count, tokens_seen, FLOPs proxy = 6*N*T, loss-vs-compute | 근사 가능 | 실제 MFU는 없지만 조건 간 계산량 proxy 비교는 가능 |
-| 시스템 비용 | tokens/sec, elapsed time, seconds/epoch | 사용 가능 | 같은 품질이면 더 빠른 조건이 우선 후보 |
+| 시스템 비용 | warmup-excluded tokens/sec, elapsed time, seconds/epoch | 사용 가능 | 같은 품질이면 더 빠른 조건이 우선 후보 |
 | Downstream benchmark | MMLU, BIG-bench, GSM8K, HumanEval | 없음 | 현재는 사전학습 소형 LM 탐색이라 태스크 성능 결론 불가 |
 | Chat/instruction | pairwise win rate, LLM judge, MT-Bench류 | 없음 | instruction tuning과 평가셋이 없어 사용자 선호 결론 불가 |
 | Safety/holistic | toxicity, robustness, calibration, fairness | 없음 | 별도 HELM류 harness가 필요 |
@@ -57,7 +57,7 @@ bits/char 기준으로 tokenizer 차이를 보정한 품질 순위입니다. 막
 
 ### Figure 4. Throughput vs Quality
 
-tokens/sec와 validation bits/char를 같이 봅니다. 같은 품질이면 오른쪽 아래 조건이 더 좋습니다.
+warmup 제외 tokens/sec와 validation bits/char를 같이 봅니다. 같은 품질이면 오른쪽 아래 조건이 더 좋습니다.
 
 ![Figure 4. Throughput vs Quality](llm_developer_figures/throughput_quality.png)
 
@@ -71,7 +71,7 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 
 여기서는 `validation bits/char`를 1차 순위 기준으로 둡니다. `validation loss`와 `perplexity`는 token 단위 지표라 같은 tokenizer 안에서는 유용하지만, vocab size 비교에서는 bits/char가 더 공정합니다.
 
-| 순위 | 조건 | 축 | 값 | n | val loss nats/token | val PPL | val bits/token | val bits/char | params(M) | tokens seen(M) | FLOPs proxy(T) | tok/s |
+| 순위 | 조건 | 축 | 값 | n | val loss nats/token | val PPL | val bits/token | val bits/char | params(M) | tokens seen(M) | FLOPs proxy(T) | warm tok/s |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 | CTX0256 | Context Length | 256 | 3 | 5.7163 | 303.8 | 8.2469 | 3.60530 | 31.5 | 0.664 | 125.3 | 2298 |
 | 2 | CTX0384 | Context Length | 384 | 3 | 5.8902 | 361.5 | 8.4977 | 3.71494 | 31.5 | 0.664 | 125.6 | 2159 |
@@ -109,7 +109,7 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 
 - 품질 1위: `LR0300` (learning_rate=0.0003), `3.82250` bits/char.
 - 비용 효율 1위: `LR0300`, `125.9` TFLOPs proxy.
-- 처리량 1위: `LR3000`, `2356` tok/s.
+- warmup 제외 처리량 1위: `LR3000`, `2356` tok/s.
 - 현재 screen-ready 범위: `5e-05`부터 `0.003`까지, `12` 조건.
 - 해석: 지금까지는 `2e-4`-`3e-4`가 좋은 구간입니다. `3e-4`는 품질이 좋지만 LR3000 계열은 최근 run에서 PPL/bit가 흔들려, 상위 후보 반복 보강이 필요합니다.
 
@@ -117,7 +117,7 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 
 - 품질 1위: `V12000` (vocab_size=12000), `3.82184` bits/char.
 - 비용 효율 1위: `V10000`, `124.0` TFLOPs proxy.
-- 처리량 1위: `V08000`, `2431` tok/s.
+- warmup 제외 처리량 1위: `V08000`, `2431` tok/s.
 - 현재 screen-ready 범위: `6000`부터 `12000`까지, `4` 조건.
 - 해석: V10000은 bits/char가 좋아 유망하지만, vocab 확대가 low-frequency tail type을 같이 늘립니다. token loss보다 bits/char와 tail 진단을 같이 봐야 합니다.
 
@@ -125,7 +125,7 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 
 - 품질 1위: `CTX0256` (context_length=256), `3.60530` bits/char.
 - 비용 효율 1위: `CTX0256`, `125.3` TFLOPs proxy.
-- 처리량 1위: `CTX0256`, `2298` tok/s.
+- warmup 제외 처리량 1위: `CTX0256`, `2298` tok/s.
 - 현재 screen-ready 범위: `256`부터 `384`까지, `2` 조건.
 - 해석: 0.1 epoch 예산에서는 짧은 context가 더 좋습니다. 긴 context가 나쁜 것이 아니라 제한된 update 수에서 short context가 더 데이터 효율적으로 보이는 신호입니다.
 
@@ -133,7 +133,7 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 
 - 품질 1위: `FFN03` (ffn_mult=3), `3.85629` bits/char.
 - 비용 효율 1위: `FFN02`, `92.4` TFLOPs proxy.
-- 처리량 1위: `FFN03`, `2976` tok/s.
+- warmup 제외 처리량 1위: `FFN03`, `2976` tok/s.
 - 현재 screen-ready 범위: `2`부터 `3`까지, `2` 조건.
 - 해석: FFN2/3은 parameter_count가 낮아 비용 효율 후보입니다. 기본 FFN4와 큰 FFN 조건이 screen-ready가 되기 전까지는 최종 모델 크기 결론을 보류해야 합니다.
 
@@ -160,6 +160,6 @@ vocab size별 chars/token 압축 이득과 low-frequency tail type 비용을 동
 ## 다음 실행 제안
 
 1. 현재 상위 후보를 `n=10` 반복으로 보강해 claim-ready 조건을 먼저 만듭니다.
-2. 상위 후보 2-3개는 `--with-checkpoints`로 별도 짧은 검증 run을 돌려 next-token sample quality를 붙입니다.
+2. 상위 후보 2-3개는 queue 실행 시 `--with-checkpoints`를 켜거나, 단일 `run_next`를 `--no-checkpoints` 없이 돌려 next-token sample quality를 붙입니다.
 3. tokenizer 비교는 token loss가 아니라 bits/char, chars/token, tail type, top-token mass를 함께 유지합니다.
 4. downstream 평가는 지금 queue와 분리해서 작은 eval harness로 시작합니다. 이 프로젝트 규모에서는 MMLU 전체보다 domain-relevant cloze/QA와 짧은 next-token qualitative set이 먼저 현실적입니다.

@@ -105,9 +105,31 @@ epochs=50
 
 최저 loss만 보지 않는다. 세 그룹을 동시에 본다.
 
-1. 품질: `final_val_bits_per_char`, `final_val_loss`, `best_val_loss`
-2. 과적합: `overfit_score`, `final_generalization_gap`, `generalization_gap_delta`, `train_val_improvement_gap`
-3. 비용: `elapsed_sec`, `seconds_per_epoch`, `tokens_per_sec`
+1. tokenizer-fair 품질: `final_val_bits_per_char`, `final_val_nats_per_char`, `best_val_bits_per_char`, `best_val_loss`
+2. 과적합/rebound: `overfit_score`, `final_generalization_gap`, `generalization_gap_delta`, `train_val_improvement_gap`, `final_minus_best_val_loss`
+3. 노출량/compute: `tokens_seen`, `estimated_chars_seen`, `tokens_per_param`, `compute_proxy`, `estimated_train_flops`
+4. 시스템 비용: `elapsed_sec`, `seconds_per_epoch`, `tokens_per_sec_after_warmup`
+
+`vocab_size`와 `tokenizer_min_frequency`는 tokenizer가 달라지는 실험이므로 `final_val_loss` 단독 순위를 사용하지 않는다. 이 두 phase는 반드시 `bits/char`, `tokens_per_char`, `chars_per_token`, tokenizer profile을 같이 본다.
+
+Tokenizer profile 필수 필드:
+
+```text
+corpus_sha256
+train_sha256
+val_sha256
+requested_vocab_size
+actual_vocab_size
+tokenizer_min_frequency
+bpe_merge_count
+train_tokens_per_char
+val_tokens_per_char
+train_chars_per_token
+val_chars_per_token
+token_length_histogram
+top_50_merge_rules
+special_token_ids
+```
 
 좋은 탐색 후보의 조건:
 
@@ -115,15 +137,64 @@ epochs=50
 2. 3 seed 중 최소 2 seed에서 baseline보다 낫다.
 3. median val bits/char가 낮다.
 4. overfit score가 baseline보다 크게 나빠지지 않는다.
-5. 시간 비용 증가가 loss 개선폭으로 설명된다.
+5. `final_minus_best_val_loss`가 크지 않아 final checkpoint 사용이 가능하거나, best checkpoint 사용 전략이 명확하다.
+6. 시간/compute 비용 증가가 bits/char 개선폭으로 설명된다.
 
 탈락 조건:
 
 1. train loss만 낮고 val loss가 개선되지 않는다.
 2. generalization gap이 크게 벌어진다.
-3. tokens/sec가 급락하는데 val 개선이 작다.
-4. epoch milestone에서 best epoch가 훨씬 앞이면 이후 epoch는 과적합 또는 낭비 후보로 본다.
+3. `final_minus_best_val_loss`가 커서 장기 학습 후반 rebound가 명확하다.
+4. `tokens_per_sec_after_warmup`이 급락하는데 val 개선이 작다.
+5. `compute_proxy` 또는 `estimated_train_flops`가 크게 늘지만 bits/char 개선이 작다.
+6. epoch milestone에서 best epoch가 훨씬 앞이면 이후 epoch는 과적합 또는 낭비 후보로 본다.
 
 ## 결론 규칙
 
 탐색 matrix는 넓고 빠르게 보는 용도다. `n=3`에서 나온 결과는 "후보" 또는 "탈락 후보"라고만 부른다. 최종 모델, 최종 hyperparameter, 논문식 claim은 상위 후보를 10-seed 확증 실험으로 다시 돌린 뒤에만 말한다.
+
+## Epoch / Long-run 해석 규칙
+
+1500 epoch 물리 run은 final 한 점으로 해석하지 않는다. `history.jsonl`의 milestone event에서 아래 값을 추출해 분석한다.
+
+```text
+val_bits_per_char
+train_bits_per_char
+final_generalization_gap
+best_val_loss_so_far
+final_minus_current_best_val_loss
+tokens_seen
+estimated_chars_seen
+tokens_per_sec_after_warmup
+```
+
+해석:
+
+- val bits/char 하락 + gap 안정: 장기 학습 confirmed 후보
+- val bits/char 하락 + gap 증가: quality improves with memorization risk
+- best 이후 final rebound 큼: early stopping 필요
+- final val 상승 + gap 증가: 과적합 또는 학습 낭비
+
+## Generation Audit
+
+loss 개선이 실제 생성 품질로 이어지는지는 별도 sanity check가 필요하다. checkpoint가 있는 후보는 아래 고정 prompt set으로 생성 diversity/repetition을 기록한다.
+
+```text
+prompt_set = ["이 영화는", "정말", "스토리는", "배우들의 연기는"]
+temperature = 0.8
+top_k = 50
+max_new_tokens = 100
+num_samples_per_prompt = 3
+```
+
+필수 지표:
+
+```text
+distinct_1
+distinct_2
+repetition_ratio_3gram
+average_generated_length
+manual_quality_note
+```
+
+`val_bits_per_char`가 좋아져도 `repetition_ratio_3gram`이 커지면 채택을 보류한다. 현재 완료 run 중 checkpoint가 없는 경우 generation 품질 결론은 쓰지 않는다.

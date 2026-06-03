@@ -1,8 +1,8 @@
 # LLM 10x Screen-Ready 중간 보고서
 
-- generated_at_utc: `2026-06-03T16:00:39+00:00`
-- completed_physical_runs: `65` / `354`
-- pending_physical_runs: `289`
+- generated_at_utc: `2026-06-03T16:07:28+00:00`
+- completed_physical_runs: `66` / `354`
+- pending_physical_runs: `288`
 - screen_ready_conditions: `20`
 - claim_ready_conditions: `0`
 - result_ledger_status: `PASS`

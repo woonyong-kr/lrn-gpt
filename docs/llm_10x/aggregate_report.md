@@ -5,12 +5,12 @@
 - 계획된 조건 수: `130`
 - 계획된 분석 행 수: `390`
 - 계획된 실제 실행 수: `354`
-- 완료된 실행 수: `62`
-- 완료된 실제 실행 수: `65`
+- 완료된 실행 수: `63`
+- 완료된 실제 실행 수: `66`
 - 화면 검토 가능 조건(`탐색 조건 n >= 3`): `20`
 - 주장 근거 가능 조건(`n >= 10`): `0`
 - 전체 실행 결과 원장: `/Users/woonyong/workspace/Krafton-Jungle/SW_AI-W13-gpt/docs/llm_10x/all_run_results.jsonl`
-- 원장 행 수: `65`
+- 원장 행 수: `66`
 - 원장 누락 감사: `PASS`
 - result.json 읽기 실패: `0`
 - 중복 완료 run_number: `0`
@@ -73,7 +73,7 @@
 | phase4_tokenizer_granularity | MF021 | exploratory | tokenizer_min_frequency | 21 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase4_tokenizer_granularity | MF034 | exploratory | tokenizer_min_frequency | 34 | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase4_tokenizer_granularity | MF055 | exploratory | tokenizer_min_frequency | 55 | 0 | no | no |  |  |  |  |  |  |  |  |
-| phase5_capacity | M031 | exploratory | capacity | 31M baseline | 1 | no | no | 3.82258 | 0 | 0 | -0.32751 | 0.10723 | 1820.48 |  |  |
+| phase5_capacity | M031 | exploratory | capacity | 31M baseline | 2 | no | no | 3.8678 | 0.0452167 | 0 | -0.294681 | 0.103501 | 1878.77 |  |  |
 | phase5_capacity | M044 | exploratory | capacity | 44M deeper | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase5_capacity | M057 | exploratory | capacity | 57M deepest 512-width | 0 | no | no |  |  |  |  |  |  |  |  |
 | phase5_capacity | M066 | exploratory | capacity | 66M wider | 0 | no | no |  |  |  |  |  |  |  |  |
