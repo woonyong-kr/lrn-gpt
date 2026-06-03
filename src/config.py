@@ -28,6 +28,11 @@ class GPTConfig:
     qkv_bias: bool = False
     ffn_mult: int = 4
     norm_first: bool = False
+    norm_eps: float = 1e-5
+    activation_name: str = "gelu"
+    ffn_dropout_position: str = "after_output"
+    attention_impl: str = "manual"
+    tie_embeddings: bool = False
     init_std: float = 0.02
     debug: bool = DEFAULT_DEBUG
     seed: int = DEFAULT_SEED

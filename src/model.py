@@ -42,24 +42,96 @@ class GELU(nn.Module):
         return 0.5 * x * (1.0 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi, device=x.device, dtype=x.dtype)) * (x + 0.044715 * torch.pow(x, 3))))
 
 
-class FeedForward(nn.Module):
-    """Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
+class ExactGELU(nn.Module):
+    """PyTorch의 exact GELU를 사용하는 비교용 활성화 함수."""
 
-    def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.gelu(x, approximate="none")
+
+
+class QuickGELU(nn.Module):
+    """일부 CLIP 계열 구현에서 쓰는 빠른 GELU 근사."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.sigmoid(1.702 * x)
+
+
+class SquaredReLU(nn.Module):
+    """ReLU 출력을 제곱해 양수 영역의 곡률을 키우는 비교용 함수."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.square(F.relu(x))
+
+
+class IdentityActivation(nn.Module):
+    """활성화 함수를 끈 선형 FFN 비교용 함수."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+
+def _normalize_activation_name(name: str) -> str:
+    return name.lower().replace("-", "_")
+
+
+def get_activation(name: str) -> nn.Module:
+    """실험 이름으로 FFN 활성화 함수를 선택합니다."""
+    normalized = _normalize_activation_name(name)
+    activations = {
+        "gelu": GELU,
+        "gelu_tanh": GELU,
+        "gelu_exact": ExactGELU,
+        "quick_gelu": QuickGELU,
+        "relu": nn.ReLU,
+        "silu": nn.SiLU,
+        "swish": nn.SiLU,
+        "swiglu": nn.SiLU,
+        "geglu": GELU,
+        "mish": nn.Mish,
+        "tanh": nn.Tanh,
+        "identity": IdentityActivation,
+        "linear": IdentityActivation,
+        "squared_relu": SquaredReLU,
+    }
+    require(normalized in activations, f"Unknown activation_name: {name}")
+    return activations[normalized]()
+
+
+def is_gated_activation(name: str) -> bool:
+    """SwiGLU/GEGLU처럼 FFN 내부에서 gate와 value를 나누는 활성화인지 확인합니다."""
+    return _normalize_activation_name(name) in {"swiglu", "geglu"}
+
+
+class FeedForward(nn.Module):
+    """Transformer FFN: Linear -> activation -> Linear, with configurable dropout order."""
+
+    def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4, activation_name: str = "gelu", dropout_position: str = "after_output"):
         super().__init__()
         require(mult > 0, "mult must be positive")
+        require(dropout_position in {"after_output", "after_activation", "none"}, "dropout_position must be after_output, after_activation, or none")
         hidden_dim = mult * d_model
-        self.linear1 = nn.Linear(d_model, hidden_dim)
-        self.activation = GELU()
+        self.activation_name = _normalize_activation_name(activation_name)
+        self.is_gated = is_gated_activation(activation_name)
+        self.linear1 = nn.Linear(d_model, hidden_dim * 2 if self.is_gated else hidden_dim)
+        self.activation = nn.SiLU() if self.activation_name == "swiglu" else GELU() if self.activation_name == "geglu" else get_activation(activation_name)
         self.linear2 = nn.Linear(hidden_dim, d_model)
         self.dropout = nn.Dropout(dropout)
+        self.dropout_position = dropout_position
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """FeedForward 네트워크를 통과시킵니다."""
         x = self.linear1(x)
-        x = self.activation(x)
+        if self.is_gated:
+            value, gate = x.chunk(2, dim=-1)
+            x = value * self.activation(gate)
+        else:
+            x = self.activation(x)
+        if self.dropout_position == "after_activation":
+            x = self.dropout(x)
         x = self.linear2(x)
-        return self.dropout(x)
+        if self.dropout_position == "after_output":
+            x = self.dropout(x)
+        return x
 
 
 class TransformerBlock(nn.Module):
@@ -68,12 +140,12 @@ class TransformerBlock(nn.Module):
     LayerNorm -> FeedForward -> residual.
     """
 
-    def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False, ffn_mult: int = 4, norm_first: bool = False):
+    def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False, ffn_mult: int = 4, norm_first: bool = False, norm_eps: float = 1e-5, activation_name: str = "gelu", ffn_dropout_position: str = "after_output", attention_impl: str = "manual"):
         super().__init__()
-        self.att = MultiHeadAttention(d_model, n_heads, drop_rate, qkv_bias)
-        self.ffn = FeedForward(d_model, dropout=drop_rate, mult=ffn_mult)
-        self.ln1 = LayerNorm(d_model)
-        self.ln2 = LayerNorm(d_model)
+        self.att = MultiHeadAttention(d_model, n_heads, drop_rate, qkv_bias, attention_impl=attention_impl)
+        self.ffn = FeedForward(d_model, dropout=drop_rate, mult=ffn_mult, activation_name=activation_name, dropout_position=ffn_dropout_position)
+        self.ln1 = LayerNorm(d_model, eps=norm_eps)
+        self.ln2 = LayerNorm(d_model, eps=norm_eps)
         self.norm_first = norm_first
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
@@ -105,12 +177,19 @@ class GPTModel(nn.Module):
         qkv_bias = self.config.get("qkv_bias", False)
         ffn_mult = self.config.get("ffn_mult", 4)
         norm_first = self.config.get("norm_first", False)
+        norm_eps = self.config.get("norm_eps", 1e-5)
+        activation_name = self.config.get("activation_name", self.config.get("activation", "gelu"))
+        ffn_dropout_position = self.config.get("ffn_dropout_position", "after_output")
+        attention_impl = self.config.get("attention_impl", "manual")
+        tie_embeddings = self.config.get("tie_embeddings", False)
 
         self.embedding = InputEmbedding(vocab_size, emb_dim, context_length, drop_rate)
-        self.blocks = nn.ModuleList([TransformerBlock(emb_dim, n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first) for _ in range(n_layers)])
-        self.final_norm = LayerNorm(emb_dim)
+        self.blocks = nn.ModuleList([TransformerBlock(emb_dim, n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias, ffn_mult=ffn_mult, norm_first=norm_first, norm_eps=norm_eps, activation_name=activation_name, ffn_dropout_position=ffn_dropout_position, attention_impl=attention_impl) for _ in range(n_layers)])
+        self.final_norm = LayerNorm(emb_dim, eps=norm_eps)
         self.lm_head = nn.Linear(emb_dim, vocab_size, bias=False)
         self.apply(lambda module: init_gpt_weights(module, self.config.get("init_std", 0.02)))
+        if tie_embeddings:
+            self.lm_head.weight = self.embedding.token_embedding.weight
 
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """

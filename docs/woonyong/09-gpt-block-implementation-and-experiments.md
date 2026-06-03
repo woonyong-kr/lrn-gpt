@@ -356,6 +356,11 @@ n_layers
 drop_rate
 qkv_bias
 ffn_mult
+activation_name
+ffn_dropout_position
+attention_impl
+norm_eps
+tie_embeddings
 norm_first 또는 post_norm
 seed
 init_std
@@ -378,3 +383,66 @@ seed=None
 ```
 
 핵심은 구조를 하드코딩하지 않고, 폭과 깊이와 초기화 방식을 config로 조절하게 만드는 것이다.
+
+## 교체 실험 지점
+
+전체 Transformer 순서를 바꾸지 않고도 테스트할 수 있는 지점이 있다.
+
+```text
+Token/Position Embedding
+-> TransformerBlock x N
+   -> Attention
+   -> Residual + LayerNorm
+   -> FeedForward
+   -> Residual + LayerNorm
+-> final norm
+-> lm head
+```
+
+여기서 구조를 흔들지 않고 바꿔볼 수 있는 값은 다음과 같다.
+
+activation_name
+: FFN 안의 `Linear1 -> activation -> Linear2`에서 activation만 바꾼다.
+기본값은 `gelu`이고, `gelu_exact`, `quick_gelu`, `relu`, `silu`, `swish`, `mish`, `squared_relu`, `identity`, `swiglu`, `geglu`를 실험할 수 있다.
+`swiglu`, `geglu`는 LLM에서 자주 쓰이는 gated FFN 계열이라 내부에서 `value * activation(gate)`를 계산하지만, 입력과 출력 shape는 그대로 유지한다.
+
+ffn_mult
+: FFN 내부 폭을 몇 배로 키울지 정한다.
+예를 들어 `emb_dim=256`, `ffn_mult=4`이면 FFN 내부 차원은 `1024`가 된다.
+표현력은 좋아질 수 있지만 파라미터 수와 연산량도 늘어난다.
+
+ffn_dropout_position
+: dropout을 어디에 둘지 정한다.
+`after_output`은 기존 GPT식 기본 흐름이고, `after_activation`은 activation 직후에 dropout을 둔다.
+`none`은 dropout module을 통과하지 않는다.
+
+attention_impl
+: attention 계산 방식을 바꾼다.
+`manual`은 우리가 그린 `QK^T -> mask -> softmax -> V` 흐름을 그대로 보여준다.
+`sdpa`는 PyTorch의 `scaled_dot_product_attention`을 사용한다.
+학습 확인용으로 attention weight를 직접 보고 싶으면 `manual`이 더 좋고, 실제 속도 비교는 `sdpa`가 유리할 수 있다.
+
+norm_eps
+: LayerNorm에서 분모가 0에 가까워지는 것을 막는 작은 값이다.
+보통 `1e-5`나 `1e-6`을 둔다.
+
+tie_embeddings
+: token embedding weight와 lm head weight를 공유할지 정한다.
+켜면 입력 토큰을 벡터로 보는 표와, 마지막에 vocab 점수를 내는 표가 같은 파라미터를 바라본다.
+작은 모델에서는 파라미터를 줄이고 GPT 계열의 weight tying 실험을 해볼 수 있다.
+
+예시:
+
+```python
+config = {
+    "vocab_size": 3000,
+    "context_length": 128,
+    "emb_dim": 256,
+    "n_heads": 8,
+    "n_layers": 6,
+    "activation_name": "swiglu",
+    "attention_impl": "sdpa",
+    "ffn_mult": 4,
+    "norm_first": False,
+}
+```

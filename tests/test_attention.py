@@ -54,3 +54,34 @@ class TestMultiHeadAttention:
         for i in range(seq_len):
             for j in range(i + 1, seq_len):
                 assert torch.allclose(attn_weights[0, :, i, j], torch.zeros(n_heads))
+
+    def test_mha_mask_created_in_inference_mode_can_train_afterward(self):
+        """평가 모드에서 만들어진 causal mask가 이후 backward를 막지 않는지 확인한다."""
+        from attention import MultiHeadAttention
+
+        mha = MultiHeadAttention(d_model=8, n_heads=2, drop_rate=0.0)
+        x = torch.randn(1, 4, 8)
+        with torch.inference_mode():
+            mha(x, causal_mask=True)
+
+        train_x = torch.randn(1, 4, 8, requires_grad=True)
+        out = mha(train_x, causal_mask=True)
+        out.sum().backward()
+        assert train_x.grad is not None
+
+    def test_sdpa_impl_returns_manual_attention_weights_when_requested(self):
+        """SDPA 설정이어도 attention weight 요청 시 manual 경로로 weight를 반환하는지 확인한다."""
+        from attention import MultiHeadAttention
+
+        batch_size, seq_len, d_model = 1, 4, 8
+        n_heads = 2
+        mha = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_rate=0.0, attention_impl="sdpa")
+        x = torch.randn(batch_size, seq_len, d_model)
+
+        out, attn_weights = mha(x, causal_mask=True, return_attention_weights=True)
+
+        assert out.shape == (batch_size, seq_len, d_model)
+        assert attn_weights.shape == (batch_size, n_heads, seq_len, seq_len)
+        for i in range(seq_len):
+            for j in range(i + 1, seq_len):
+                assert torch.allclose(attn_weights[0, :, i, j], torch.zeros(n_heads))

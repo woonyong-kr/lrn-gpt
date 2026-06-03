@@ -83,12 +83,15 @@ class MultiHeadAttention(nn.Module):
     - attention weight와 V를 곱한 뒤 head를 다시 합치기
     """
 
-    def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False):
+    def __init__(self, d_model: int, n_heads: int, drop_rate: float = 0.1, qkv_bias: bool = False, attention_impl: str = "manual"):
         super().__init__()
         require(d_model % n_heads == 0, "d_model must be divisible by n_heads")
+        require(attention_impl in {"manual", "sdpa"}, "attention_impl must be manual or sdpa")
         self.d_model = d_model
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
+        self.drop_rate = drop_rate
+        self.attention_impl = attention_impl
         self.W_query = nn.Linear(d_model, d_model, bias=qkv_bias)
         self.W_key = nn.Linear(d_model, d_model, bias=qkv_bias)
         self.W_value = nn.Linear(d_model, d_model, bias=qkv_bias)
@@ -109,6 +112,9 @@ class MultiHeadAttention(nn.Module):
         require(x.ndim == 3, "MultiHeadAttention input must have shape (B, T, C)")
         seq_len = self._validate_embedding_dim(x)
         queries, keys, values = self._project_qkv(x)
+        if self.attention_impl == "sdpa" and not return_attention_weights:
+            return self._run_sdpa_attention(queries, keys, values, causal_mask=causal_mask)
+
         out, attn_weights = self._run_multi_head_attention(queries, keys, values, seq_len=seq_len, causal_mask=causal_mask)
 
         if return_attention_weights:
@@ -138,11 +144,18 @@ class MultiHeadAttention(nn.Module):
         context = self._merge_heads(weighted_value_context(attn_weights, values))
         return self.resid_dropout(self.out_proj(context)), attn_weights
 
+    def _run_sdpa_attention(self, queries: torch.Tensor, keys: torch.Tensor, values: torch.Tensor, causal_mask: bool) -> torch.Tensor:
+        """PyTorch scaled_dot_product_attention으로 같은 attention 계산을 실행합니다."""
+        dropout_p = self.drop_rate if self.training else 0.0
+        context = F.scaled_dot_product_attention(queries, keys, values, dropout_p=dropout_p, is_causal=causal_mask)
+        return self.resid_dropout(self.out_proj(self._merge_heads(context)))
+
     def _get_causal_mask(self, seq_len: int) -> torch.Tensor:
         """현재 device에서 재사용 가능한 causal mask를 반환합니다."""
         if self._causal_mask.size(0) < seq_len or self._causal_mask.device != self.W_query.weight.device:
             self._causal_mask = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=self.W_query.weight.device), diagonal=1)
-        return self._causal_mask[:seq_len, :seq_len]
+        mask = self._causal_mask[:seq_len, :seq_len]
+        return mask.clone() if torch.is_inference(mask) else mask
 
     def _split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """(B, T, C)를 (B, H, T, head_dim)으로 바꿉니다."""
