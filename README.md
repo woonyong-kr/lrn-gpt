@@ -2,9 +2,9 @@
 
 ## 1. 개요
 
-이 프로젝트는 PyTorch만 사용해 작은 GPT 계열 언어 모델을 직접 구현하는 학생용 템플릿입니다. 완성할 모델은 거대한 ChatGPT가 아니라, LLM의 핵심 component를 이해하기 위한 교육용 mini GPT입니다.
+이 프로젝트는 PyTorch만 사용해 작은 GPT 계열 언어 모델을 직접 구현하는 mini GPT 학습 저장소입니다. 완성할 모델은 거대한 ChatGPT가 아니라, LLM의 핵심 component를 이해하기 위한 교육용 mini GPT입니다.
 
-학생용 소스는 `TODO`와 `NotImplementedError`가 남아 있는 상태입니다. 처음 테스트를 실행하면 실패하는 것이 정상이며, 각 단계의 TODO를 구현하면서 해당 테스트 파일을 하나씩 통과시키면 됩니다.
+현재 `master` 브랜치는 핵심 구현, 테스트, 최종 보고서 중심으로 정리되어 있습니다. 임시 재해석 문서, 대량 실험 산출물, 10x/nsmc_bestfit 자동화 파일은 `backup` 브랜치에 보존되어 있습니다.
 
 참고 도서:
 
@@ -46,7 +46,7 @@
   - 외부 pretrained model
   - 외부 tokenizer vocabulary
 
-교재에서는 `tiktoken`을 사용하는 부분이 있지만, 이 과제에서는 tokenizer를 직접 구현해야 하므로 `tiktoken`도 사용하지 않습니다.
+교재에서는 `tiktoken`을 사용하는 부분이 있지만, 이 저장소의 core 구현은 tokenizer를 직접 구현하므로 `tiktoken`이나 Hugging Face `tokenizers`에 의존하지 않습니다.
 
 ### 3.2 Colab에서 사용
 
@@ -89,20 +89,28 @@ gpt-lab/
 ├── download_data.py
 ├── gpt-lab.ipynb
 ├── data/
+├── scripts/
+│   ├── run_lm_experiment.py
+│   └── generate_report_figures.py
 ├── src/
 │   ├── __init__.py
 │   ├── bpe.py
+│   ├── config.py
 │   ├── dataset.py
 │   ├── embeddings.py
 │   ├── attention.py
+│   ├── experiments.py
 │   ├── model.py
 │   ├── train.py
+│   ├── train_loop_agent.py
+│   ├── guards.py
 │   └── finetune.py
 └── tests/
     ├── test_bpe.py
     ├── test_dataset.py
     ├── test_attention.py
     ├── test_model.py
+    ├── test_experiments.py
     ├── test_train.py
     └── test_finetune.py
 ```
@@ -111,12 +119,18 @@ gpt-lab/
 | --- | --- |
 | `download_data.py` | NSMC 원본 데이터를 내려받고 과제용 파일 생성 |
 | `gpt-lab.ipynb` | Colab/로컬 실행 순서 안내 노트북 |
+| `scripts/run_lm_experiment.py` | 한 번의 LM 실험을 실행하고 Markdown 결과를 생성 |
+| `scripts/generate_report_figures.py` | HY 실험 결과 그래프 생성 |
 | `src/bpe.py` | UTF-8 byte-level BPE tokenizer |
+| `src/config.py` | GPT 설정과 seed 고정 |
 | `src/dataset.py` | GPT 사전 학습용 Dataset과 DataLoader |
 | `src/embeddings.py` | token embedding + position embedding |
 | `src/attention.py` | causal multi-head self-attention |
+| `src/experiments.py` | 재현 가능한 소규모 하이퍼파라미터 실험 유틸리티 |
 | `src/model.py` | LayerNorm, GELU, FeedForward, TransformerBlock, GPTModel |
 | `src/train.py` | loss 계산, checkpoint, generation, pretraining loop |
+| `src/train_loop_agent.py` | 작은 자동 실험 루프와 docs/train 요약 갱신 |
+| `src/guards.py` | 실험 입력 검증 보조 |
 | `src/finetune.py` | NSMC 감성 분류 Dataset과 classifier |
 
 ---
@@ -186,9 +200,10 @@ python download_data.py
 | 2 | Dataset / InputEmbedding | `src/dataset.py`, `src/embeddings.py` | `pytest tests/test_dataset.py -v` |
 | 3 | MultiHeadAttention | `src/attention.py` | `pytest tests/test_attention.py -v` |
 | 4 | GPT 모델 구성 요소 | `src/model.py` | `pytest tests/test_model.py -v` |
-| 5 | 사전 학습 유틸리티 | `src/train.py` | `pytest tests/test_train.py -v` |
-| 6 | 감성 분류 미세 조정 | `src/finetune.py` | `pytest tests/test_finetune.py -v` |
-| 7 | 전체 테스트 | 전체 | `pytest tests/ -v` |
+| 5 | 실험 설정과 모델 옵션 | `src/experiments.py`, `src/config.py` | `pytest tests/test_experiments.py -v` |
+| 6 | 사전 학습 유틸리티 | `src/train.py` | `pytest tests/test_train.py -v` |
+| 7 | 감성 분류 미세 조정 | `src/finetune.py` | `pytest tests/test_finetune.py -v` |
+| 8 | 전체 테스트 | 전체 | `pytest tests/ -v` |
 
 처음부터 `pytest tests/ -v`만 실행하면 어디가 문제인지 찾기 어렵습니다. 현재 구현 중인 단계의 테스트부터 실행하세요.
 

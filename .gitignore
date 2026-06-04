@@ -4,6 +4,7 @@ data/ratings_test.txt
 data/nsmc_lm_*.txt
 data/nsmc_sentiment_*.jsonl
 data/vocab_*.json
+data/nsmc_bpe_vocab_*.json
 data/*.jsonl
 data/obsidian_*.txt
 data/obsidian_*.json
@@ -38,12 +39,19 @@ htmlcov/
 *.pth
 checkpoints/
 experiments/
+docs/train/runs/
+docs/HY/figures_temp/
+docs/HY/figures_llm_seq/
+docs/HY/llm_relog/
+docs/llm_10x/
+docs/nsmc_bestfit/
 
 # 과제 안내문 (로컬/Notion 전용, repo에 미포함)
 notion/
 
 # 기타
 .DS_Store
+.vscode/
 *.swp
 *~
 
