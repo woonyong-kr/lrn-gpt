@@ -49,3 +49,37 @@ def test_model_blocks_future_tokens_and_matches_independent_loss():
     loss.backward()
     assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters())
     assert model.embedding.token_embedding.weight.grad.abs().sum() > 0
+
+
+def test_training_pairs_target_the_next_token():
+    run = TrainingRun.create(TEXT, TEXT, CONFIG)
+    run.train_tokens = torch.arange(4, 40)
+    observed = []
+    handle = run.model.register_forward_pre_hook(
+        lambda model, args, kwargs: observed.append((args[0].clone(), kwargs["targets"].clone())),
+        with_kwargs=True,
+    )
+    try:
+        run.step()
+    finally:
+        handle.remove()
+    x, y = observed[0]
+    torch.testing.assert_close(y, x + 1)
+    assert tuple(x.shape) == (3, 8)
+
+
+def test_generation_seed_and_invalid_input(tmp_path):
+    from src.runnable import sample
+
+    path = tmp_path / "model.pt"
+    TrainingRun.create(TEXT, TEXT, CONFIG).save(path)
+
+    def generate(**overrides):
+        args = dict(path=path, prompt="작은", temperature=0.8, top_k=5, length=8, seed=21)
+        return sample(**(args | overrides))
+
+    assert generate() == generate()
+    assert generate(length=0)["text"] == "작은"
+    for options in [{"prompt": ""}, {"temperature": 0}, {"temperature": float("nan")}, {"top_k": 0}, {"length": -1}]:
+        with pytest.raises(ValueError):
+            generate(**options)

@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 from typing import Any
+import numpy as np
 
 try:
     from .guards import fail, require
@@ -92,7 +93,7 @@ class BPETokenizer:
         if self.vocab_size <= len(self.id_to_token):
             return self
 
-        sequence = [BYTE_OFFSET + byte for byte in corpus.encode("utf-8")]
+        sequence = np.frombuffer(corpus.encode("utf-8"), dtype=np.uint8).astype(np.int64) + BYTE_OFFSET
 
         while len(self.id_to_token) < self.vocab_size:
             pair = self._select_best_pair(sequence, self.min_frequency)
@@ -159,12 +160,13 @@ class BPETokenizer:
         학습된 merge rule을 순서대로 적용해야 train 때 만든 tokenization
         기준과 encode 때 기준이 같아집니다.
         """
-        ids = [BYTE_OFFSET + byte for byte in text.encode("utf-8")]
+        ids = np.frombuffer(text.encode("utf-8"), dtype=np.uint8).astype(np.int64) + BYTE_OFFSET
         for pair in self.merges:
             new_id = self.token_to_id.get(pair)
             if new_id is not None:
                 ids = self._replace_pair(ids, pair, new_id)
 
+        ids = ids.tolist()
         if add_bos_eos:
             return [self.get_bos_id(), *ids, self.get_eos_id()]
         return ids
@@ -204,18 +206,23 @@ class BPETokenizer:
         return "".join(text_pieces)
 
     @staticmethod
-    def _replace_pair(sequence: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
+    def _replace_pair(sequence, pair: tuple[int, int], new_id: int):
         """sequence 안의 pair를 왼쪽부터 겹치지 않게 새 ID로 치환합니다."""
-        result: list[int] = []
-        i = 0
-        while i < len(sequence):
-            if i < len(sequence) - 1 and (sequence[i], sequence[i + 1]) == pair:
-                result.append(new_id)
-                i += 2
-            else:
-                result.append(sequence[i])
-                i += 1
-        return result
+        sequence = np.asarray(sequence, dtype=np.int64)
+        matches = np.flatnonzero((sequence[:-1] == pair[0]) & (sequence[1:] == pair[1]))
+        if not len(matches):
+            return sequence
+        if pair[0] == pair[1]:
+            # In a run such as aaaaa, merge positions 0 and 2, never 1 and 3.
+            indices = np.arange(len(matches))
+            starts = np.r_[True, np.diff(matches) != 1]
+            run_starts = np.maximum.accumulate(np.where(starts, indices, 0))
+            matches = matches[(indices - run_starts) % 2 == 0]
+        keep = np.ones(len(sequence), dtype=bool)
+        keep[matches + 1] = False
+        result = sequence.copy()
+        result[matches] = new_id
+        return result[keep]
 
     @staticmethod
     def _select_best_pair(sequence: list[int], min_frequency: int = 1) -> tuple[int, int] | None:
@@ -223,17 +230,17 @@ class BPETokenizer:
         if len(sequence) < 2:
             return None
 
-        counts: dict[tuple[int, int], int] = {}
-        first_seen: dict[tuple[int, int], int] = {}
-        for idx in range(len(sequence) - 1):
-            pair = (sequence[idx], sequence[idx + 1])
-            counts[pair] = counts.get(pair, 0) + 1
-            first_seen.setdefault(pair, idx)
-
-        best_pair = min(counts, key=lambda pair: (-counts[pair], first_seen[pair], pair[0], pair[1]))
-        if counts[best_pair] < min_frequency:
+        sequence = np.asarray(sequence, dtype=np.int64)
+        # Pack two nonnegative token IDs into one integer; NumPy performs the
+        # counting in native code. Ties still use the first sequence position.
+        codes = (sequence[:-1] << 32) | sequence[1:]
+        pairs, first, counts = np.unique(codes, return_index=True, return_counts=True)
+        maximum = counts.max()
+        if maximum < min_frequency:
             return None
-        return best_pair
+        candidates = np.flatnonzero(counts == maximum)
+        code = int(pairs[candidates[np.argmin(first[candidates])]])
+        return code >> 32, code & 0xFFFFFFFF
 
     def _expand_to_bytes(self, token_id: int) -> list[int]:
         """Merge token을 원본 byte 값 리스트로 재귀적으로 펼칩니다."""

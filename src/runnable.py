@@ -15,7 +15,7 @@ import torch
 from .bpe import BPETokenizer
 from .config import GPTConfig, set_seed
 from .model import GPTModel
-from .train import generate
+from .generation import generate
 
 ROOT = Path(__file__).resolve().parents[1]
 
