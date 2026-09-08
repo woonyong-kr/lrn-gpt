@@ -110,8 +110,10 @@ class BPETokenizer:
         """Vocabulary와 merge rule을 JSON 파일로 저장합니다.
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         """
-        path = Path(path)
+        Path(path).write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def to_dict(self):
+        """Portable tokenizer state used in a self-contained training checkpoint."""
         id_to_token_entries = []
         for token_id, token in sorted(self.id_to_token.items()):
             serialized_token = self._serialize_token(token)
@@ -125,15 +127,20 @@ class BPETokenizer:
 
         payload = {
             "vocab_size": self.vocab_size,
+            "min_frequency": self.min_frequency,
             "id_to_token": id_to_token_entries,
             "merges": merge_entries,
         }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return payload
 
     def load(self, path: str | Path):
         """save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다."""
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        return self.load_dict(payload)
+
+    def load_dict(self, payload):
         self.vocab_size = int(payload["vocab_size"])
+        self.min_frequency = int(payload.get("min_frequency", 1))
         self.id_to_token = {}
         self.token_to_id = {}
         self.merges = [tuple(pair) for pair in payload["merges"]]

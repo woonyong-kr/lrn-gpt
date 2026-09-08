@@ -1,0 +1,1 @@
+{"vocab_size": 300, "context_length": 32, "emb_dim": 48, "n_heads": 4, "n_layers": 2, "drop_rate": 0.1, "norm_first": true, "batch_size": 8, "learning_rate": 0.002, "seed": 42}

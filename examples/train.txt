@@ -1,0 +1,8 @@
+A small model learns to predict the next token. The tokenizer turns text into bytes and merges frequent pairs.
+A small model reads a short sequence. Attention can read the past but cannot read future tokens.
+We save the model and the optimizer. We restore the random state and continue the same training run.
+A small model needs data. A small model needs a loss function. A small model learns from its mistakes.
+The input is text. The output is a new sequence of tokens. A token is not always a whole word.
+We train a small model on a CPU. We measure validation loss on a separate text.
+작은 모델은 다음 토큰을 예측한다. 텍스트는 바이트로 바뀌고 자주 등장하는 쌍은 합쳐진다.
+어텐션은 이전 토큰을 읽는다. 미래 토큰은 읽을 수 없다. 체크포인트에서 학습을 다시 시작한다.

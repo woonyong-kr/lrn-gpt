@@ -1,0 +1,15 @@
+{
+  "source_head": "cf423731112aaa992001f04be7c15f2c83b104a0",
+  "source_urls": [
+    "https://github.com/woonyong-kr/SW_AI-W13-gpt.git",
+    "https://github.com/Jungle-12-303/wk13_6_gpt.git",
+    "https://github.com/krafton-jungle/gpt-lab.git"
+  ],
+  "inherited_local_files": {
+    ".clang-format": "71d54ed04897e7971361d3f449d35e70b7544defe62418b42987e7ef194f62a8",
+    ".gitattributes": "39a09e3d15593ca693420e3f96a6a504dd51199844d0404c46b335da1d917fc3",
+    ".gitignore": "511d6c925819e81ccb10cab5bbe3fa0400e07738fa7430c6020ae3dedc989af8"
+  },
+  "learning_scope": "lrn-gpt",
+  "source_preserved": true
+}

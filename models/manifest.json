@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "environment": {
+    "recorded_on": "2026-09-08",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": 25769803776
+  },
+  "python": "Python 3.12.12",
+  "libraries": "2.14.0 2.5.3",
+  "models": [
+    {
+      "path": "models/untrained.pt",
+      "sha256": "70be0b8dd03d4fe9a9fe21eddf40a6dda3c788ef118dae6f32d156be0a9458d8",
+      "bytes": 381507,
+      "global_step": 0
+    },
+    {
+      "path": "models/reference.pt",
+      "sha256": "11522ff45902fc23020605d6f0c3b035944fc9cdd57f0abf5c2f43f4e35c9fb8",
+      "bytes": 1101189,
+      "global_step": 200
+    }
+  ],
+  "config": {
+    "vocab_size": 300,
+    "context_length": 32,
+    "emb_dim": 48,
+    "n_heads": 4,
+    "n_layers": 2,
+    "drop_rate": 0.1,
+    "norm_first": true,
+    "batch_size": 8,
+    "learning_rate": 0.002,
+    "seed": 42
+  },
+  "corpora": [
+    {
+      "path": "examples/train.txt",
+      "sha256": "e5b5293f681b76f8a6a50ea7b6ac060e1c2d0ef73a03aedbe7056192c6d4a345",
+      "bytes": 842,
+      "source": "Original short text written for this learning program"
+    },
+    {
+      "path": "examples/validation.txt",
+      "sha256": "435e32800ed384d8dd1d7deadab3428afb8a6e4c089450813b8e8eaa1d328297",
+      "bytes": 323,
+      "source": "Original short text written for this learning program"
+    }
+  ],
+  "training_path": [
+    0,
+    100,
+    "resume",
+    200
+  ],
+  "training_loop_seconds_excluding_tokenizer_setup": [
+    0.5130264160688967,
+    0.49285566713660955
+  ],
+  "validation": [
+    {
+      "step": 0,
+      "loss": 5.710302829742432
+    },
+    {
+      "step": 100,
+      "loss": 3.0901200771331787
+    },
+    {
+      "step": 200,
+      "loss": 3.2903499603271484
+    }
+  ],
+  "evaluated_tokens": 192,
+  "quality": "Overfitting demonstration; not a useful general chatbot."
+}

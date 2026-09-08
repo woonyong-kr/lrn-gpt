@@ -62,3 +62,8 @@ local
 
 # Annotation (auto-generated)
 .annotation/
+
+.venv/
+.artifacts/
+!models/reference.pt
+!models/untrained.pt

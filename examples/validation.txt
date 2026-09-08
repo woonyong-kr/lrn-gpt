@@ -1,0 +1,3 @@
+A small model can predict tokens from text. The model reads previous tokens and generates a new sequence.
+We save a checkpoint and restore the model. Validation loss measures predictions on a separate text.
+작은 모델은 텍스트를 읽고 다음 토큰을 생성한다. 학습 결과와 검증 결과를 구분한다.
