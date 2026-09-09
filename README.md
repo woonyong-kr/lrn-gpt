@@ -70,6 +70,6 @@ BPE의 pair 빈도 집계와 병합은 NumPy 배열로 처리한다. 빈도가 �
 
 ## 출처와 기여
 
-[woonyong-kr/SW_AI-W13-gpt](https://github.com/woonyong-kr/SW_AI-W13-gpt), [Jungle-12-303/wk13_6_gpt](https://github.com/Jungle-12-303/wk13_6_gpt), [krafton-jungle/gpt-lab](https://github.com/krafton-jungle/gpt-lab)에서 이어 받은 학습용 파생본이다. 기준 원본 revision은 `cf423731112aaa992001f04be7c15f2c83b104a0`이다. 원본 과제·팀 코드와 이후 개인 확장을 구분하며, 개별 기여는 Git author와 diff로 확인한다. 기존 저작권 표시는 소스에 유지한다.
+`krafton-jungle/gpt-lab` 과제와 `Jungle-12-303/wk13_6_gpt` 팀 구현을 거친 `woonyong-kr/SW_AI-W13-gpt`에서 이어 받은 학습용 파생본이다. 기준 원본 revision은 `cf423731112aaa992001f04be7c15f2c83b104a0`이다. 과제 제공물·팀 구현·이후 확장은 Git author와 diff로 구분하며, 기존 저작권 표시는 유지한다. 원본 주소의 공개 접근이 제한돼 있어 자료는 아래 이력 링크로 확인할 수 있다.
 
 기존 BPE·Transformer 구현을 CPU 학습·재개·생성 경로로 묶었다. 감성 분류와 대량 탐색, 자동 학습 agent를 포함한 이전 실험은 [정리 전 이력](https://github.com/woonyong-kr/lrn-gpt/tree/7875b64f85f19959d66dcaf06c1dcbeb129d71eb)에 남아 있다.
